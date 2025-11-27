@@ -9,187 +9,219 @@
         body { font-family: Arial, sans-serif; max-width: 900px; margin: 20px auto; padding: 20px; background: #f9f9f9; text-align: center; }
         h1 { color: #2c3e50; position: relative; }
         h1::before { content: "✝️"; font-size: 1.5em; margin-right: 10px; }
-        textarea { width: 100%; height: 250px; padding: 15px; font-size: 16px; margin: 15px 0; border: 2px solid #3498db; border-radius: 8px; }
+        textarea { width: 100%; height: 250px; padding: 15px; font-size: 16px; margin: 15px 0; border: 2px solid #3498db; border-radius: 8px; resize: vertical; }
         button { padding: 12px 20px; margin: 5px; font-size: 16px; background: #3498db; color: white; border: none; border-radius: 6px; cursor: pointer; }
         button:hover { background: #2980b9; }
+        button:disabled { background: #bdc3c7; cursor: not-allowed; }
         #controles { margin: 20px 0; }
         #status { margin-top: 15px; font-weight: bold; color: #27ae60; }
         #contador { margin: 10px; color: #7f8c8d; }
         #velocidade { margin: 10px; }
-        input[type="file"] { margin: 10px auto; display: block; }
+        input[type="file"] { margin: 10px auto; display: block; padding: 10px; border: 1px solid #3498db; border-radius: 6px; }
+        #destaque { background: #e8f5e8; padding: 10px; border-radius: 6px; margin-top: 10px; white-space: pre-wrap; text-align: left; }
     </style>
 </head>
 <body>
     <h1>📖 Leitor de Áudio Gratuito - Paróquia</h1>
-    <p>Digite ou cole qualquer texto (Bíblia, livro...) e ouça com voz natural + baixe em MP3. Totalmente grátis!</p>
+    <p>Digite ou cole qualquer texto (Bíblia, livro...) e ouça com voz natural + baixe em áudio. Totalmente grátis! Funciona melhor no Chrome/Edge.</p>
 
     <input type="file" id="arquivo" accept=".txt,.pdf" onchange="carregarArquivo()">
     <textarea id="texto" placeholder="Cole ou digite seu texto aqui... (ex: 'No princípio, Deus criou os céus e a terra...')"></textarea>
     <div id="contador">Palavras: 0</div>
+    <div id="destaque"></div>
 
     <div id="controles">
-        <label>Velocidade: <input type="range" id="velocidade" min="0.5" max="2" step="0.1" value="0.9" onchange="atualizarVelocidade()"></label>
-        <br>
-        <button onclick="ouvir()">▶️ Ouvir com Destaque</button>
+        <label>Velocidade: <input type="range" id="velocidade" min="0.5" max="2" step="0.1" value="0.9" onchange="atualizarVelocidade()"></label><br>
+        <button onclick="ouvir()" id="btnOuvir">▶️ Ouvir com Destaque</button>
         <button onclick="parar()">⏹ Parar</button>
-        <button onclick="baixarMP3()">💾 Baixar MP3</button>
+        <button onclick="baixarAudio()">💾 Baixar Áudio (WAV/MP3)</button>
         <button onclick="compartilhar()">📱 Compartilhar</button>
     </div>
 
     <div id="status"></div>
 
     <script>
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
         const textoArea = document.getElementById("texto");
         const status = document.getElementById("status");
         const contador = document.getElementById("contador");
         const velocidadeSlider = document.getElementById("velocidade");
+        const btnOuvir = document.getElementById("btnOuvir");
+        const destaqueDiv = document.getElementById("destaque");
         let utteranceAtual = null;
-        let mediaRecorder = null;
         let audioChunks = [];
 
-        // Atualizar contador de palavras
+        // Contador de palavras
         textoArea.oninput = function() {
             const palavras = this.value.trim().split(/\s+/).length;
             contador.textContent = `Palavras: ${palavras}`;
         };
 
-        // Atualizar velocidade
         function atualizarVelocidade() {
-            if (utteranceAtual) utteranceAtual.rate = velocidadeSlider.value;
+            if (utteranceAtual) utteranceAtual.rate = parseFloat(velocidadeSlider.value);
         }
 
-        // Carregar arquivo (TXT ou PDF)
+        // Carregar arquivo
         async function carregarArquivo() {
             const file = document.getElementById("arquivo").files[0];
             if (!file) return;
             status.textContent = `Carregando "${file.name}"...`;
-            
-            if (file.name.endsWith(".txt")) {
-                const reader = new FileReader();
-                reader.onload = function(ev) {
-                    textoArea.value = ev.target.result;
-                    status.textContent = `TXT carregado!`;
-                };
-                reader.readAsText(file);
-            } else if (file.name.endsWith(".pdf")) {
-                const arrayBuffer = await file.arrayBuffer();
-                const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
-                let textoCompleto = "";
-                for (let i = 1; i <= pdf.numPages; i++) {
-                    const page = await pdf.getPage(i);
-                    const texto = await page.getTextContent();
-                    textoCompleto += texto.items.map(item => item.str).join(' ') + '\n';
+            try {
+                if (file.name.endsWith(".txt")) {
+                    const reader = new FileReader();
+                    reader.onload = function(ev) {
+                        textoArea.value = ev.target.result;
+                        status.textContent = `TXT carregado! (${Math.round(file.size/1024)} KB)`;
+                    };
+                    reader.readAsText(file);
+                } else if (file.name.endsWith(".pdf")) {
+                    const arrayBuffer = await file.arrayBuffer();
+                    const pdf = await pdfjsLib.getDocument({data: arrayBuffer}).promise;
+                    let textoCompleto = "";
+                    for (let i = 1; i <= pdf.numPages; i++) {
+                        const page = await pdf.getPage(i);
+                        const texto = await page.getTextContent();
+                        textoCompleto += texto.items.map(item => item.str).join(' ') + '\n\n';
+                    }
+                    textoArea.value = textoCompleto;
+                    status.textContent = `PDF carregado (${pdf.numPages} páginas)!`;
                 }
-                textoArea.value = textoCompleto;
-                status.textContent = `PDF carregado (${pdf.numPages} páginas)!`;
+            } catch (error) {
+                status.textContent = `Erro ao carregar: ${error.message}. Tente TXT ou copie o texto manualmente.`;
+                console.error(error);
             }
         }
 
-        // Ouvir com destaque simples (rola o texto)
+        // Ouvir com destaque
         function ouvir() {
             parar();
-            const texto = textoArea.value;
+            const texto = textoArea.value.trim();
             if (!texto) return alert("Digite ou carregue um texto primeiro!");
 
-            utteranceAtual = new SpeechSynthesisUtterance(texto);
-            
-            // Escolher melhor voz PT-BR
-            speechSynthesis.getVoices().forEach(voice => {
-                if (voice.lang.includes("pt-BR")) utteranceAtual.voice = voice;
-            });
-            
-            utteranceAtual.rate = parseFloat(velocidadeSlider.value);
-            utteranceAtual.pitch = 1;
-            utteranceAtual.volume = 1;
+            // Mostrar texto no destaque
+            destaqueDiv.innerHTML = texto.replace(/\n/g, '<br>');
+            destaqueDiv.style.display = 'block';
 
-            // Destaque: rola conforme lê
-            utteranceAtual.onboundary = function(event) {
-                if (event.name === "word") {
-                    const pos = event.charIndex;
-                    textoArea.scrollTop = (pos / texto.length) * textoArea.scrollHeight;
-                    // Highlight básico: seleciona palavra (opcional)
-                }
-            };
+            // Carregar vozes se necessário
+            if (speechSynthesis.getVoices().length === 0) {
+                speechSynthesis.onvoiceschanged = () => speakNow(texto);
+            } else {
+                speakNow(texto);
+            }
 
-            utteranceAtual.onend = () => status.textContent = "Leitura concluída! 🙏";
-            utteranceAtual.onerror = () => status.textContent = "Erro na leitura. Tente recarregar a página.";
+            function speakNow(texto) {
+                utteranceAtual = new SpeechSynthesisUtterance(texto);
+                const voices = speechSynthesis.getVoices();
+                const vozPT = voices.find(v => v.lang.startsWith("pt")) || voices[0];
+                if (vozPT) utteranceAtual.voice = vozPT;
+                
+                utteranceAtual.rate = parseFloat(velocidadeSlider.value);
+                utteranceAtual.pitch = 1;
+                utteranceAtual.volume = 1;
 
-            speechSynthesis.speak(utteranceAtual);
-            status.textContent = "Lendo com voz natural...";
+                // Destaque e rolagem
+                let charIndex = 0;
+                utteranceAtual.onboundary = function(event) {
+                    if (event.name === 'word') {
+                        charIndex = event.charIndex;
+                        // Highlight simples: adiciona classe (estilo CSS pode expandir)
+                        const range = document.createRange();
+                        const sel = window.getSelection();
+                        range.setStart(destaqueDiv.childNodes[0] || destaqueDiv, charIndex);
+                        sel.removeAllRanges();
+                        sel.addRange(range);
+                        destaqueDiv.scrollTop = (charIndex / texto.length) * destaqueDiv.scrollHeight;
+                    }
+                };
+
+                utteranceAtual.onend = () => {
+                    status.textContent = "Leitura concluída! 🙏";
+                    btnOuvir.disabled = false;
+                };
+                utteranceAtual.onerror = (e) => {
+                    status.textContent = `Erro na leitura: ${e.error}. Tente recarregar ou mudar voz.`;
+                    console.error(e);
+                    btnOuvir.disabled = false;
+                };
+
+                btnOuvir.disabled = true;
+                speechSynthesis.speak(utteranceAtual);
+                status.textContent = "Lendo com destaque... (voz: " + (vozPT ? vozPT.name : 'padrão') + ")";
+            }
         }
 
         function parar() {
             speechSynthesis.cancel();
-            if (mediaRecorder) mediaRecorder.stop();
+            btnOuvir.disabled = false;
             status.textContent = "Parado.";
+            destaqueDiv.style.display = 'none';
         }
 
-        // Baixar MP3 (funciona no Chrome/Edge com MediaRecorder)
-        async function baixarMP3() {
-            if (!textoArea.value) return alert("Nada para baixar!");
-            
-            status.textContent = "Gerando MP3... (use Chrome para melhor resultado)";
-            
-            // Forçar load de vozes
-            await new Promise(resolve => {
-                if (speechSynthesis.getVoices().length) return resolve();
-                speechSynthesis.onvoiceschanged = resolve;
-            });
+        // Baixar Áudio (WAV simples; para MP3, usa blob básico)
+        async function baixarAudio() {
+            const texto = textoArea.value.trim();
+            if (!texto) return alert("Nada para baixar!");
 
-            // Sintetizar áudio e gravar
-            const utterance = new SpeechSynthesisUtterance(textoArea.value);
-            const voices = speechSynthesis.getVoices();
-            const vozPT = voices.find(v => v.lang.includes("pt-BR")) || voices[0];
-            utterance.voice = vozPT;
-            utterance.rate = parseFloat(velocidadeSlider.value);
+            status.textContent = "Gerando áudio... (pode demorar 10-30s no celular)";
 
-            // Usar MediaStream para capturar áudio do sistema (Chrome suporta)
-            const canvas = document.createElement('canvas');
-            const ctx = canvas.getContext('2d');
-            // Nota: Para áudio real, usa Web Audio API + MediaRecorder
-            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            
-            // Simulação simples: gera áudio e baixa como WAV (MP3 precisa de lib extra, mas isso baixa WAV jogável)
-            // Para MP3 full, adicione lamejs CDN se quiser
-            utterance.onstart = () => {
-                // Captura stream (experimental no Chrome)
-                navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
-                    mediaRecorder = new MediaRecorder(stream);
-                    mediaRecorder.ondataavailable = event => audioChunks.push(event.data);
-                    mediaRecorder.onstop = () => {
-                        const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
-                        const url = URL.createObjectURL(audioBlob);
-                        const a = document.createElement('a');
-                        a.href = url;
-                        a.download = 'audio-religioso.wav';  // Mude para .mp3 se adicionar encoder
-                        a.click();
-                        audioChunks = [];
-                        status.textContent = "MP3/WAV baixado! (Converta online se precisar de MP3)";
-                    };
-                    mediaRecorder.start();
-                    setTimeout(() => mediaRecorder.stop(), 5000);  // Ajuste tempo baseado no texto
-                }).catch(err => {
-                    status.textContent = "Download falhou. Tente no Chrome desktop.";
-                    console.error(err);
-                });
-            };
-            
-            speechSynthesis.speak(utterance);
+            try {
+                // Sintetizar e capturar com MediaRecorder (precisa permissão de microfone para capturar saída de áudio)
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                const mediaRecorder = new MediaRecorder(stream);
+                const chunks = [];
+
+                mediaRecorder.ondataavailable = (e) => chunks.push(e.data);
+                mediaRecorder.onstop = () => {
+                    const blob = new Blob(chunks, { type: 'audio/wav' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'audio-paroquia.wav';  // Mude para .mp3 se converter depois
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                    stream.getTracks().forEach(track => track.stop());
+                    status.textContent = "Áudio baixado como WAV! Abra no player do celular.";
+                };
+
+                mediaRecorder.start();
+                // Iniciar síntese
+                const utterance = new SpeechSynthesisUtterance(texto);
+                const voices = speechSynthesis.getVoices();
+                utterance.voice = voices.find(v => v.lang.startsWith("pt")) || voices[0];
+                utterance.rate = parseFloat(velocidadeSlider.value);
+                speechSynthesis.speak(utterance);
+
+                // Parar após 5s ou onend (ajuste para texto longo)
+                utterance.onend = () => setTimeout(() => mediaRecorder.stop(), 500);
+                setTimeout(() => mediaRecorder.stop(), 10000);  // Fallback 10s
+
+            } catch (error) {
+                status.textContent = `Download falhou: ${error.message}. Tente no Chrome desktop ou use uma extensão TTS para MP3.`;
+                console.error(error);
+            }
         }
 
         // Compartilhar
         function compartilhar() {
             const url = window.location.href;
-            const texto = "Ouça textos religiosos em áudio grátis! " + url;
+            const textoShare = "Ouça textos da Bíblia em áudio grátis! " + url;
             if (navigator.share) {
-                navigator.share({ title: "Leitor de Áudio Paróquia", text: texto, url });
+                navigator.share({ title: "Leitor Áudio Paróquia", text: textoShare, url });
             } else {
-                navigator.clipboard.writeText(texto).then(() => alert("Link copiado para colar no WhatsApp!"));
+                navigator.clipboard.writeText(textoShare).then(() => {
+                    status.textContent = "Link copiado! Cole no WhatsApp.";
+                }).catch(() => alert("Copie manualmente: " + textoShare));
             }
         }
 
-        // Carregar vozes ao iniciar
-        speechSynthesis.onvoiceschanged = () => {};
+        // Inicializar vozes
+        window.onload = () => {
+            if (speechSynthesis.getVoices().length > 0) {
+                status.textContent = "Pronto! Vozes carregadas.";
+            }
+        };
     </script>
 </body>
 </html>
