@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Leitor de Áudio com Destaque e MP3 - Paróquia</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <style>
         body { font-family: Arial, sans-serif; max-width: 900px; margin: 20px auto; padding: 20px; background: #f9f9f9; text-align: center; }
         h1::before { content: "✝️ "; font-size: 1.5em; }
@@ -36,17 +36,20 @@
         <button onclick="compartilhar()">📱 Compartilhar</button>
     </div>
 
-    <div id="status">Pronto! Selecione o texto com o mouse ou faça upload.</div>
+    <div id="status">Carregando... (use Chrome para melhor suporte)</div>
 
     <script>
-        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.worker.min.js';
+        // Configurar PDF.js ANTES de usar
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+        // Definir variáveis PRIMEIRO para evitar "before initialization"
         const textoArea = document.getElementById("texto");
         const status = document.getElementById("status");
         const debug = document.getElementById("debug");
         const velocidade = document.getElementById("velocidade");
         let utterance = null;
 
-        // Função de debug para mostrar erros no console e na página
+        // Função de debug
         function logDebug(msg, error = null) {
             console.log(msg, error);
             debug.textContent = msg + (error ? ': ' + error.message : '');
@@ -54,14 +57,14 @@
             setTimeout(() => debug.style.display = 'none', 5000);
         }
 
-        // Botão de teste para upload
+        // Botão de teste
         function testarUpload() {
             const fileInput = document.getElementById("arquivo");
             if (!fileInput.files[0]) return alert("Escolha um arquivo primeiro!");
-            carregarArquivo();  // Chama a função real
+            carregarArquivo();
         }
 
-        // === CARREGAR TXT ou PDF (COM ERRO HANDLING ROBUSTO) ===
+        // === CARREGAR TXT ou PDF (CORRIGIDO COM TRY-CATCH PLENO) ===
         async function carregarArquivo() {
             const file = document.getElementById("arquivo").files[0];
             if (!file) {
@@ -73,12 +76,13 @@
             logDebug(`Iniciando upload de ${file.name}`);
 
             try {
-                if (file.name.endsWith(".txt")) {
+                if (file.name.toLowerCase().endsWith(".txt")) {
                     const texto = await file.text();
                     textoArea.value = texto;
-                    status.textContent = `TXT carregado com sucesso! (${texto.split(" ").length} palavras) – selecione o trecho.`;
+                    const palavras = texto.split(" ").length;
+                    status.textContent = `TXT carregado com sucesso! (${palavras} palavras) – selecione o trecho.`;
                     logDebug("TXT lido OK");
-                } else if (file.name.endsWith(".pdf")) {
+                } else if (file.name.toLowerCase().endsWith(".pdf")) {
                     logDebug("Processando PDF...");
                     const arrayBuffer = await file.arrayBuffer();
                     const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
@@ -90,7 +94,8 @@
                         fullText += pageText + "\n\n";
                     }
                     textoArea.value = fullText.trim();
-                    status.textContent = `PDF carregado com sucesso! (${pdf.numPages} páginas, ~${fullText.split(" ").length} palavras) – selecione o trecho.`;
+                    const palavras = fullText.split(" ").length;
+                    status.textContent = `PDF carregado com sucesso! (${pdf.numPages} páginas, ~${palavras} palavras) – selecione o trecho.`;
                     logDebug(`PDF lido OK: ${pdf.numPages} páginas`);
                 } else {
                     throw new Error("Formato não suportado. Use TXT ou PDF.");
@@ -98,7 +103,8 @@
             } catch (error) {
                 status.textContent = "Erro no upload. Copie o texto manualmente no campo abaixo.";
                 logDebug("Erro no upload", error);
-                alert(`Falha: ${error.message}. Tente: 1) Arquivo menor; 2) Chrome/Edge; 3) Copie o texto de um PDF (use Google Docs para extrair).`);
+                console.error("Detalhes do erro:", error);
+                alert(`Falha: ${error.message}. Dicas: 1) Use Chrome/Edge; 2) Arquivo < 5MB; 3) Copie texto de PDF via Google Docs.`);
             }
         }
 
@@ -165,7 +171,7 @@
                     const url = URL.createObjectURL(blob);
                     const a = document.createElement("a");
                     a.href = url;
-                    a.download = "trecho-paroquia.wav";  // WAV funciona em todos os celulares
+                    a.download = "trecho-paroquia.wav";
                     document.body.appendChild(a);
                     a.click();
                     document.body.removeChild(a);
@@ -185,7 +191,7 @@
                 tempUtterance.onend = () => setTimeout(() => mediaRecorder.stop(), 800);
                 speechSynthesis.speak(tempUtterance);
 
-                setTimeout(() => mediaRecorder.stop(), 60000); // Máximo 60s
+                setTimeout(() => mediaRecorder.stop(), 60000);
             } catch (e) {
                 status.textContent = "Falha no download. Tente Chrome desktop ou copie o áudio manualmente.";
                 logDebug("Erro no download MP3", e);
@@ -201,9 +207,12 @@
             }
         }
 
-        // Carregar vozes ao iniciar
+        // Carregar vozes ao iniciar (DEPOIS das variáveis)
         if (speechSynthesis.getVoices().length === 0) {
-            speechSynthesis.onvoiceschanged = () => status.textContent = "Vozes carregadas – faça upload ou selecione texto!";
+            speechSynthesis.onvoiceschanged = () => {
+                status.textContent = "Vozes carregadas – faça upload ou selecione texto!";
+                logDebug("Vozes PT-BR carregadas");
+            };
         } else {
             status.textContent = "Pronto para upload ou texto manual.";
         }
