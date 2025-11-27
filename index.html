@@ -8,20 +8,25 @@
     <style>
         body { font-family: Arial, sans-serif; max-width: 900px; margin: 20px auto; padding: 20px; background: #f9f9f9; text-align: center; }
         h1::before { content: "✝️ "; font-size: 1.5em; }
-        #texto { width: 100%; height: 300px; padding: 15px; font-size: 17px; margin: 15px 0; border: 2px solid #3498db; border-radius: 8px; background: white; }
+        #texto { width: 100%; height: 300px; padding: 15px; font-size: 17px; margin: 15px 0; border: 2px solid #3498db; border-radius: 8px; background: white; line-height: 1.5; }
         button { padding: 12px 20px; margin: 8px; font-size: 16px; background: #3498db; color: white; border: none; border-radius: 6px; cursor: pointer; }
         button:hover { background: #2980b9; }
         .selecionado { background: #fff3cd !important; padding: 2px 4px; border-radius: 4px; }
         #status { margin: 15px; font-weight: bold; color: #27ae60; }
+        #arquivo { padding: 10px; border: 1px solid #3498db; border-radius: 6px; margin: 10px; }
+        #debug { color: red; font-size: 12px; margin: 5px; display: none; }
     </style>
 </head>
 <body>
     <h1>Leitor de Áudio Gratuito</h1>
-    <p>Selecione qualquer trecho → ele fica amarelo<br>Clique ▶️ para ouvir só o selecionado → Baixe em MP3</p>
+    <p>Selecione qualquer trecho → ele fica amarelo. Clique ▶️ para ouvir só o selecionado → Baixe em MP3</p>
 
+    <label for="arquivo">Escolha arquivo TXT ou PDF (teste com um pequeno primeiro):</label><br>
     <input type="file" id="arquivo" accept=".txt,.pdf" onchange="carregarArquivo()"><br>
+    <button onclick="testarUpload()">🔧 Testar Upload (Debug)</button>
+    <div id="debug"></div>
 
-    <textarea id="texto" placeholder="Cole ou carregue seu texto da Bíblia..."></textarea>
+    <textarea id="texto" placeholder="Se o upload falhar, cole o texto aqui manualmente..."></textarea>
 
     <div>
         <label>Velocidade: <input type="range" id="velocidade" min="0.5" max="2" step="0.1" value="0.9"></label><br><br>
@@ -31,57 +36,89 @@
         <button onclick="compartilhar()">📱 Compartilhar</button>
     </div>
 
-    <div id="status">Pronto! Selecione o texto com o mouse.</div>
+    <div id="status">Pronto! Selecione o texto com o mouse ou faça upload.</div>
 
     <script>
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.worker.min.js';
         const textoArea = document.getElementById("texto");
         const status = document.getElementById("status");
+        const debug = document.getElementById("debug");
         const velocidade = document.getElementById("velocidade");
         let utterance = null;
 
-        // === DESTAQUE VISUAL DO TRECHO SELECIONADO ===
-        textoArea.addEventListener("mouseup", destacarSelecao);
-        textoArea.addEventListener("touchend", destacarSelecao); // para celular
-
-        function destacarSelecao() {
-            const sel = textoArea.value.substring(textoArea.selectionStart, textoArea.selectionEnd);
-            if (sel.length > 0) {
-                status.textContent = `Trecho selecionado: ${sel.split(" ").length} palavras – pronto para ouvir ou baixar`;
-            }
+        // Função de debug para mostrar erros no console e na página
+        function logDebug(msg, error = null) {
+            console.log(msg, error);
+            debug.textContent = msg + (error ? ': ' + error.message : '');
+            debug.style.display = 'block';
+            setTimeout(() => debug.style.display = 'none', 5000);
         }
 
-        // === CARREGAR TXT ou PDF ===
+        // Botão de teste para upload
+        function testarUpload() {
+            const fileInput = document.getElementById("arquivo");
+            if (!fileInput.files[0]) return alert("Escolha um arquivo primeiro!");
+            carregarArquivo();  // Chama a função real
+        }
+
+        // === CARREGAR TXT ou PDF (COM ERRO HANDLING ROBUSTO) ===
         async function carregarArquivo() {
             const file = document.getElementById("arquivo").files[0];
-            if (!file) return;
-            status.textContent = "Carregando...";
-            if (file.name.endsWith(".txt")) {
-                textoArea.value = await file.text();
-                status.textContent = "TXT carregado – selecione o trecho";
-            } else if (file.name.endsWith(".pdf")) {
-                const arrayBuffer = await file.arrayBuffer();
-                const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
-                let fullText = "";
-                for (let i = 1; i <= pdf.numPages; i++) {
-                    const page = await pdf.getPage(i);
-                    const content = await page.getTextContent();
-                    fullText += content.items.map(item => item.str).join(" ") + "\n\n";
+            if (!file) {
+                status.textContent = "Nenhum arquivo selecionado.";
+                return;
+            }
+
+            status.textContent = `Carregando "${file.name}" (${Math.round(file.size / 1024)} KB)...`;
+            logDebug(`Iniciando upload de ${file.name}`);
+
+            try {
+                if (file.name.endsWith(".txt")) {
+                    const texto = await file.text();
+                    textoArea.value = texto;
+                    status.textContent = `TXT carregado com sucesso! (${texto.split(" ").length} palavras) – selecione o trecho.`;
+                    logDebug("TXT lido OK");
+                } else if (file.name.endsWith(".pdf")) {
+                    logDebug("Processando PDF...");
+                    const arrayBuffer = await file.arrayBuffer();
+                    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+                    let fullText = "";
+                    for (let i = 1; i <= pdf.numPages; i++) {
+                        const page = await pdf.getPage(i);
+                        const content = await page.getTextContent();
+                        const pageText = content.items.map(item => item.str).join(" ");
+                        fullText += pageText + "\n\n";
+                    }
+                    textoArea.value = fullText.trim();
+                    status.textContent = `PDF carregado com sucesso! (${pdf.numPages} páginas, ~${fullText.split(" ").length} palavras) – selecione o trecho.`;
+                    logDebug(`PDF lido OK: ${pdf.numPages} páginas`);
+                } else {
+                    throw new Error("Formato não suportado. Use TXT ou PDF.");
                 }
-                textoArea.value = fullText.trim();
-                status.textContent = `PDF carregado (${pdf.numPages} páginas) – selecione o trecho`;
+            } catch (error) {
+                status.textContent = "Erro no upload. Copie o texto manualmente no campo abaixo.";
+                logDebug("Erro no upload", error);
+                alert(`Falha: ${error.message}. Tente: 1) Arquivo menor; 2) Chrome/Edge; 3) Copie o texto de um PDF (use Google Docs para extrair).`);
             }
         }
+
+        // === DESTAQUE VISUAL DO TRECHO SELECIONADO ===
+        textoArea.addEventListener("mouseup", function() {
+            const selStart = this.selectionStart;
+            const selEnd = this.selectionEnd;
+            if (selStart !== selEnd) {
+                const selectedText = this.value.substring(selStart, selEnd);
+                status.textContent = `Trecho selecionado: ${selectedText.split(" ").length} palavras – pronto para ouvir ou baixar!`;
+            }
+        });
 
         // === OUVIR (só o trecho selecionado ou tudo) ===
         function ouvir() {
             parar();
-            let textoParaLer = "";
+            let textoParaLer = textoArea.value;
 
             if (textoArea.selectionStart !== textoArea.selectionEnd) {
                 textoParaLer = textoArea.value.substring(textoArea.selectionStart, textoArea.selectionEnd);
-            } else {
-                textoParaLer = textoArea.value;
             }
 
             if (!textoParaLer.trim()) return alert("Selecione ou digite um texto primeiro!");
@@ -92,9 +129,14 @@
             if (vozBR) utterance.voice = vozBR;
 
             utterance.rate = parseFloat(velocidade.value);
+            utterance.pitch = 1;
+            utterance.volume = 1;
+
             utterance.onend = () => status.textContent = "Leitura concluída 🙏";
+            utterance.onerror = () => status.textContent = "Erro na leitura – verifique o console (F12).";
+
             speechSynthesis.speak(utterance);
-            status.textContent = "Lendo trecho selecionado...";
+            status.textContent = `Lendo trecho selecionado... (voz: ${vozBR ? vozBR.name : 'padrão'})`;
         }
 
         function parar() {
@@ -102,7 +144,7 @@
             status.textContent = "Parado.";
         }
 
-        // === BAIXAR MP3/WAV DO TRECHO SELECIONADO (funciona no Chrome/Edge) ===
+        // === BAIXAR MP3/WAV DO TRECHO SELECIONADO ===
         async function baixarMP3() {
             let textoParaMP3 = textoArea.value;
             if (textoArea.selectionStart !== textoArea.selectionEnd) {
@@ -110,7 +152,7 @@
             }
             if (!textoParaMP3.trim()) return alert("Selecione um trecho para baixar!");
 
-            status.textContent = "Gerando MP3... (aceite a permissão de microfone se aparecer)";
+            status.textContent = "Gerando áudio... (aceite permissão de microfone). Use Chrome para melhor resultado.";
 
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -123,38 +165,48 @@
                     const url = URL.createObjectURL(blob);
                     const a = document.createElement("a");
                     a.href = url;
-                    a.download = "trecho-biblia.wav";  // .wav abre em qualquer celular
+                    a.download = "trecho-paroquia.wav";  // WAV funciona em todos os celulares
+                    document.body.appendChild(a);
                     a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
                     stream.getTracks().forEach(t => t.stop());
-                    status.textContent = "MP3/WAV baixado com sucesso! 🎉";
+                    status.textContent = "Áudio baixado! Abra no seu player (converta para MP3 online se quiser). 🎉";
                 };
 
                 mediaRecorder.start();
 
-                // Lê o texto e para a gravação quando terminar
                 const tempUtterance = new SpeechSynthesisUtterance(textoParaMP3);
-                const vozBR = speechSynthesis.getVoices().find(v => v.lang.includes("pt")) || speechSynthesis.getVoices()[0];
+                const voices = speechSynthesis.getVoices();
+                const vozBR = voices.find(v => v.lang.includes("pt")) || voices[0];
                 tempUtterance.voice = vozBR;
                 tempUtterance.rate = parseFloat(velocidade.value);
 
                 tempUtterance.onend = () => setTimeout(() => mediaRecorder.stop(), 800);
                 speechSynthesis.speak(tempUtterance);
 
-                setTimeout(() => mediaRecorder.stop(), 60000); // segurança máxima 60s
+                setTimeout(() => mediaRecorder.stop(), 60000); // Máximo 60s
             } catch (e) {
-                status.textContent = "Falha no download. Use Chrome no computador.";
-                console.error(e);
+                status.textContent = "Falha no download. Tente Chrome desktop ou copie o áudio manualmente.";
+                logDebug("Erro no download MP3", e);
             }
         }
 
         function compartilhar() {
-            const msg = "Ouça qualquer trecho da Bíblia selecionando com o mouse e baixando em MP3 → " + location.href;
-            if (navigator.share) navigator.share({title: "Leitor Bíblico Paróquia", text: msg});
-            else { navigator.clipboard.writeText(msg); status.textContent = "Link copiado!"; }
+            const msg = "Ouça trechos da Bíblia com destaque e baixe em áudio grátis! → " + location.href;
+            if (navigator.share) {
+                navigator.share({ title: "Leitor Bíblico Paróquia", text: msg });
+            } else {
+                navigator.clipboard.writeText(msg).then(() => status.textContent = "Link copiado para WhatsApp!");
+            }
         }
 
         // Carregar vozes ao iniciar
-        speechSynthesis.onvoiceschanged = () => status.textContent = "Vozes carregadas – selecione o trecho!";
+        if (speechSynthesis.getVoices().length === 0) {
+            speechSynthesis.onvoiceschanged = () => status.textContent = "Vozes carregadas – faça upload ou selecione texto!";
+        } else {
+            status.textContent = "Pronto para upload ou texto manual.";
+        }
     </script>
 </body>
 </html>
