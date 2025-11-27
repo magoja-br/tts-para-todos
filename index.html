@@ -34,7 +34,9 @@
 
     <input type="file" id="arquivo" accept=".txt,.pdf"><br><br>
 
-    <select id="vozSelect"></select>
+    <select id="vozSelect">
+        <option>Carregando vozes PT-BR...</option>
+    </select>
     <input type="range" id="velocidade" min="0.5" max="2" step="0.1" value="0.9">
     <span id="velValue">0.9x</span><br><br>
 
@@ -52,7 +54,7 @@
         <button onclick="compartilhar()">Compartilhar</button>
     </div>
 
-    <div id="status">Carregando vozes...</div>
+    <div id="status">Carregando vozes PT-BR...</div>
 
     <script>
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
@@ -66,17 +68,21 @@
 
         velocidade.oninput = () => velValue.textContent = velocidade.value + "x";
 
+        // === CARREGAR APENAS VOZES PT-BR ===
         function carregarVozes() {
-            voices = speechSynthesis.getVoices();
+            voices = speechSynthesis.getVoices().filter(v => v.lang === "pt-BR");
             vozSelect.innerHTML = "";
+            if (voices.length === 0) {
+                vozSelect.innerHTML = '<option>Sem vozes PT-BR disponíveis (use Chrome)</option>';
+                status.textContent = "Instale vozes PT-BR no seu sistema ou use Chrome.";
+                return;
+            }
             voices.forEach((v, i) => {
-                if (v.lang.includes("pt") || i < 10) {
-                    const opt = new Option(v.name + " (" + v.lang + ")", i);
-                    if (v.lang.includes("pt-BR")) opt.selected = true;
-                    vozSelect.add(opt);
-                }
+                const opt = new Option(v.name, i);
+                opt.selected = true; // Primeira como padrão
+                vozSelect.add(opt);
             });
-            status.textContent = "Pronto! Selecione um trecho e ouça.";
+            status.textContent = `Pronto! ${voices.length} vozes PT-BR carregadas. Selecione um trecho.`;
         }
         if (speechSynthesis.getVoices().length) carregarVozes();
         else speechSynthesis.onvoiceschanged = carregarVozes;
@@ -101,20 +107,25 @@
             const file = this.files[0];
             if (!file) return;
             status.textContent = "Carregando...";
-            if (file.name.endsWith(".txt")) {
-                textoDiv.innerHTML = (await file.text()).replace(/\n/g, "<br>");
-            } else if (file.name.endsWith(".pdf")) {
-                const arrayBuffer = await file.arrayBuffer();
-                const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
-                let texto = "";
-                for (let i = 1; i <= pdf.numPages; i++) {
-                    const page = await pdf.getPage(i);
-                    const content = await page.getTextContent();
-                    texto += content.items.map(t => t.str).join(" ") + "<br><br>";
+            try {
+                if (file.name.endsWith(".txt")) {
+                    textoDiv.innerHTML = (await file.text()).replace(/\n/g, "<br>");
+                } else if (file.name.endsWith(".pdf")) {
+                    const arrayBuffer = await file.arrayBuffer();
+                    const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
+                    let texto = "";
+                    for (let i = 1; i <= pdf.numPages; i++) {
+                        const page = await pdf.getPage(i);
+                        const content = await page.getTextContent();
+                        texto += content.items.map(t => t.str).join(" ") + "<br><br>";
+                    }
+                    textoDiv.innerHTML = texto;
                 }
-                textoDiv.innerHTML = texto;
+                status.textContent = "Arquivo carregado! Role e selecione o trecho.";
+            } catch (e) {
+                status.textContent = "Erro no arquivo. Cole o texto manualmente.";
+                alert("Erro: " + e.message);
             }
-            status.textContent = "Arquivo carregado! Role e selecione o trecho.";
         };
 
         function ouvir() {
@@ -128,26 +139,52 @@
             utterance.volume = 1;
             utterance.onend = () => status.textContent = "Leitura concluída";
             speechSynthesis.speak(utterance);
-            status.textContent = "Lendo...";
+            status.textContent = "Lendo com voz PT-BR...";
         }
 
         function parar() { speechSynthesis.cancel(); status.textContent = "Parado"; }
 
-        function baixarMP3() {
+        // === BAIXAR MP3 SEM 404 (com fetch e headers corretos) ===
+        async function baixarMP3() {
             let texto = window.getSelection().toString() || textoDiv.innerText;
             if (!texto.trim()) return alert("Selecione um trecho!");
-            status.textContent = "Baixando MP3 com som...";
-            const encoded = encodeURIComponent(texto.substring(0, 3000));
-            const url = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encoded}&tl=pt-br&client=tw-ob&ttsspeed=1`;
-            const a = document.createElement("a");
-            a.href = url;
-            a.download = "biblia-paroquia.mp3";
-            a.click();
-            status.textContent = "MP3 baixado com sucesso!";
+            if (texto.length > 200) texto = texto.substring(0, 200) + "..."; // Limite para evitar bloqueio
+
+            status.textContent = "Gerando MP3 com som alto...";
+
+            const encoded = encodeURIComponent(texto);
+            const ttsUrl = `https://translate.google.com/translate_tts?ie=UTF-8&tl=pt&client=tw-ob&q=${encoded}&ttsspeed=1`;
+
+            try {
+                const response = await fetch(ttsUrl, {
+                    method: 'GET',
+                    headers: {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                        'Referer': 'https://translate.google.com/',
+                        'Accept': 'audio/mpeg, audio/*;q=0.9,*/*;q=0.8'
+                    }
+                });
+
+                if (!response.ok) throw new Error('Resposta inválida do servidor');
+
+                const audioBlob = await response.blob();
+                const url = URL.createObjectURL(audioBlob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = "biblia-paroquia.mp3";
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                status.textContent = "MP3 baixado com sucesso! (som alto em PT-BR)";
+            } catch (e) {
+                status.textContent = "Erro no download. Tente texto mais curto ou Chrome.";
+                alert("Falha: " + e.message + ". Dica: Use texto < 200 caracteres.");
+            }
         }
 
         function compartilhar() {
-            const msg = "Ouça a Bíblia com destaque amarelo e baixe MP3 grátis → https://magoja-br.github.io/tts-para-todos";
+            const msg = "Ouça a Bíblia com vozes PT-BR e baixe MP3 grátis → https://magoja-br.github.io/tts-para-todos";
             if (navigator.share) navigator.share({title: "Leitor Bíblico", text: msg});
             else { navigator.clipboard.writeText(msg); status.textContent = "Link copiado!"; }
         }
