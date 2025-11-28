@@ -20,7 +20,7 @@
     <h1>Bíblia Ave Maria Paróquia</h1>
     <p>Escolha livro → capítulo → selecione trecho → ouça ou baixe áudio!</p>
 
-    <select id="livro"></select>
+    <select id="livro"><option>Carregando Bíblia...</option></select>
     <select id="capitulo"></select><br><br>
 
     <select id="vozSelect"></select>
@@ -38,8 +38,6 @@
 
     <div id="status">Carregando Bíblia...</div>
 
-    <!-- Agora carrega como JavaScript -->
-    <script src="biblia.js"></script>
     <script>
         const texto = document.getElementById("texto");
         const livroSelect = document.getElementById("livro");
@@ -47,41 +45,44 @@
         const status = document.getElementById("status");
         let savedStart = 0, savedEnd = 0;
         let voices = [];
+        let biblia = null;
 
         // Salvar seleção
         texto.addEventListener("mouseup", () => { savedStart = texto.selectionStart; savedEnd = texto.selectionEnd; });
         texto.addEventListener("keyup", () => { savedStart = texto.selectionStart; savedEnd = texto.selectionEnd; });
 
-        // Carrega a Bíblia do seu biblia.js (formato que você enviou)
-        const livros = bibliaData.antigoTestamento;
+        // CARREGA A BÍBLIA COM FETCH() – FUNCIONA 100%
+        fetch("biblia.json")
+            .then(r => r.json())
+            .then(data => {
+                biblia = data.antigoTestamento;
+                livroSelect.innerHTML = "";
+                biblia.forEach(livro => livroSelect.add(new Option(livro.nome, livro.nome)));
 
-        livros.forEach(livro => {
-            livroSelect.add(new Option(livro.nome, livro.nome));
-        });
+                livroSelect.onchange = () => {
+                    capSelect.innerHTML = "";
+                    const livroAtual = biblia.find(l => l.nome === livroSelect.value);
+                    livroAtual.capitulos.forEach(cap => capSelect.add(new Option(cap.capitulo, cap.capitulo)));
+                    capSelect.onchange();
+                };
 
-        livroSelect.onchange = () => {
-            capSelect.innerHTML = "";
-            const livroAtual = livros.find(l => l.nome === livroSelect.value);
-            livroAtual.capitulos.forEach(cap => {
-                capSelect.add(new Option(cap.capitulo, cap.capitulo));
+                capSelect.onchange = () => {
+                    const livroAtual = biblia.find(l => l.nome === livroSelect.value);
+                    const capAtual = livroAtual.capitulos.find(c => c.capitulo == capSelect.value);
+                    let txt = "";
+                    capAtual.versiculos.forEach(v => txt += v.versiculo + " " + v.texto + "\n");
+                    texto.value = txt.trim();
+                    status.textContent = `${livroAtual.nome} ${capAtual.capitulo} carregado!`;
+                };
+
+                livroSelect.value = "Gênesis";
+                livroSelect.onchange();
+                status.textContent = "Bíblia carregada! Escolha o capítulo.";
+            })
+            .catch(err => {
+                status.textContent = "Erro ao carregar biblia.json – verifique o nome do arquivo";
+                console.error(err);
             });
-            capSelect.onchange();
-        };
-
-        capSelect.onchange = () => {
-            const livroAtual = livros.find(l => l.nome === livroSelect.value);
-            const capituloAtual = livroAtual.capitulos.find(c => c.capitulo == capSelect.value);
-            let txt = "";
-            capituloAtual.versiculos.forEach(v => {
-                txt += v.versiculo + " " + v.texto + "\n";
-            });
-            texto.value = txt.trim();
-            status.textContent = `${livroAtual.nome} ${capituloAtual.capitulo} carregado!`;
-        };
-
-        // Inicia com Gênesis 1
-        livroSelect.value = "Gênesis";
-        livroSelect.onchange();
 
         // Vozes PT-BR
         function loadVoices(){
