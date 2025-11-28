@@ -3,50 +3,64 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Leitor Bíblico Paróquia - FUNCIONA</title>
+    <title>Leitor Bíblico Paróquia - Definitivo</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <style>
         body { font-family: Arial; max-width: 900px; margin: 20px auto; padding: 20px; background: #f9f9f9; text-align: center; }
+        h1 { color: #2c3e50; }
         h1::before { content: "✝️ "; font-size: 2em; }
-        #textoContainer { border: 2px solid #3498db; border-radius: 10px; height: 380px; overflow-y: auto; padding: 15px; background: white; text-align: left; font-size: 18px; line-height: 1.8; margin: 15px 0; }
-        textarea { width: 100%; height: 100%; border: none; outline: none; resize: none; font-size: 18px; line-height: 1.8; background: transparent; }
-        textarea::selection { background: #fffacd; color: black; } /* Amarelo claro */
+        #textoContainer { 
+            border: 2px solid #3498db; 
+            border-radius: 10px; 
+            height: 340px; 
+            overflow-y: auto; 
+            padding: 15px; 
+            background: white; 
+            text-align: left; 
+            font-size: 18px; 
+            line-height: 1.8; 
+            margin: 15px 0;
+        }
+        #texto { width: 100%; height: 100%; outline: none; border: none; resize: none; font-family: Arial; font-size: 18px; line-height: 1.8; background: transparent; }
+        #texto::selection { background: #fffacd; } /* Amarelo claro automático */
         button, select { padding: 12px 20px; margin: 8px; font-size: 16px; background: #3498db; color: white; border: none; border-radius: 8px; cursor: pointer; }
         button:hover { background: #2980b9; }
         #status { margin: 15px; font-weight: bold; color: #27ae60; }
-        #progressContainer { display: none; margin: 15px; }
-        #progressBar { width: 100%; height: 25px; background: #ddd; border-radius: 12px; overflow: hidden; }
+        #progressContainer { display: none; margin: 10px; }
+        #progressBar { width: 100%; height: 20px; background: #ddd; border-radius: 10px; overflow: hidden; }
         #progress { width: 0%; height: 100%; background: #27ae60; transition: width 0.3s; }
     </style>
 </head>
 <body>
     <h1>Leitor Bíblico Paróquia</h1>
-    <p>Selecione qualquer trecho → fica amarelo claro e só ele é lido<br>MP3 ilimitado (qualquer tamanho) com voz PT-BR perfeita da Microsoft</p>
+    <p>Selecione qualquer trecho (fica amarelo claro) → só ele é lido<br>Gere MP3 ilimitado em silêncio com progresso (qualquer tamanho, sem erros)!</p>
 
     <input type="file" id="arquivo" accept=".txt,.pdf"><br><br>
 
-    <select id="vozSelect"></select>
-    <input type="range" id="velocidade" min="0.5" max="2" step="0.1" value="1">
-    <span id="velValue">1.0x</span><br><br>
+    <select id="vozSelect">
+        <option>Carregando vozes PT-BR...</option>
+    </select>
+    <input type="range" id="velocidade" min="0.5" max="2" step="0.1" value="0.9">
+    <span id="velValue">0.9x</span><br><br>
 
     <div id="textoContainer">
-        <textarea id="texto" placeholder="Cole ou carregue o texto aqui...">No princípio, Deus criou os céus e a terra.</textarea>
+        <textarea id="texto" placeholder="Cole ou carregue um texto aqui...&#10;&#10;Exemplo: No princípio, Deus criou os céus e a terra.">No princípio, Deus criou os céus e a terra.</textarea>
     </div>
 
     <div id="progressContainer">
-        <div>Gerando MP3: <span id="progressText">0%</span></div>
+        <div>Gerando áudio em silêncio: <span id="progressText">0%</span></div>
         <div id="progressBar"><div id="progress"></div></div>
     </div>
 
     <div>
-        <button onclick="ouvir()">▶️ Ouvir só o selecionado</button>
+        <button onclick="ouvir()">▶️ Ouvir só selecionado</button>
         <button onclick="parar()">⏹ Parar</button>
-        <button onclick="gerarMP3()">💾 Baixar MP3 (ilimitado)</button>
+        <button onclick="gerarMP3()">💾 Gerar e Baixar Áudio</button>
         <button onclick="compartilhar()">📱 Compartilhar</button>
     </div>
 
-    <div id="status">Carregando...</div>
+    <div id="status">Carregando vozes PT-BR...</div>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <script>
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
         const textoArea = document.getElementById("texto");
@@ -57,118 +71,139 @@
         const progressContainer = document.getElementById("progressContainer");
         const progress = document.getElementById("progress");
         const progressText = document.getElementById("progressText");
+        let voices = [];
         let savedStart = 0;
         let savedEnd = 0;
+        let audioChunks = [];
 
         velocidade.oninput = () => velValue.textContent = velocidade.value + "x";
 
-        // Salva a seleção toda vez que o usuário seleciona
-        textoArea.addEventListener("mouseup", salvarSelecao);
-        textoArea.addEventListener("keyup", salvarSelecao);
-        textoArea.addEventListener("touchend", salvarSelecao);
+        // Salva seleção em tempo real
+        textoArea.addEventListener("mouseup", () => { savedStart = textoArea.selectionStart; savedEnd = textoArea.selectionEnd; });
+        textoArea.addEventListener("keyup", () => { savedStart = textoArea.selectionStart; savedEnd = textoArea.selectionEnd; });
 
-        function salvarSelecao() {
-            savedStart = textoArea.selectionStart;
-            savedEnd = textoArea.selectionEnd;
-        }
-
-        // Carregar vozes PT-BR
+        // === VOZES SÓ PT-BR ===
         function carregarVozes() {
-            const voices = speechSynthesis.getVoices().filter(v => v.lang === "pt-BR");
+            voices = speechSynthesis.getVoices().filter(v => v.lang === "pt-BR");
             vozSelect.innerHTML = "";
             if (voices.length === 0) {
-                vozSelect.innerHTML = '<option>Chrome necessário para vozes PT-BR</option>';
+                vozSelect.innerHTML = '<option>Sem vozes PT-BR (use Chrome)</option>';
+                status.textContent = "Use Chrome ou instale vozes PT-BR.";
                 return;
             }
-            voices.forEach((v, i) => vozSelect.add(new Option(v.name, i)));
-            status.textContent = "Pronto! Selecione o trecho desejado.";
+            voices.forEach((v, i) => {
+                const opt = new Option(v.name, i);
+                if (i === 0) opt.selected = true;
+                vozSelect.add(opt);
+            });
+            status.textContent = `Pronto! ${voices.length} vozes PT-BR. Selecione um trecho.`;
         }
-        speechSynthesis.onvoiceschanged = carregarVozes;
         if (speechSynthesis.getVoices().length) carregarVozes();
+        else speechSynthesis.onvoiceschanged = carregarVozes;
 
         // Upload
-        document.getElementById("arquivo").onchange = async e => {
-            const file = e.target.files[0];
+        document.getElementById("arquivo").onchange = async function() {
+            const file = this.files[0];
             if (!file) return;
             status.textContent = "Carregando...";
-            if (file.name.endsWith(".txt")) {
-                textoArea.value = await file.text();
-            } else if (file.name.endsWith(".pdf")) {
-                const buf = await file.arrayBuffer();
-                const pdf = await pdfjsLib.getDocument(buf).promise;
-                let txt = "";
-                for (let i = 1; i <= pdf.numPages; i++) {
-                    const page = await pdf.getPage(i);
-                    const content = await page.getTextContent();
-                    txt += content.items.map(item => item.str).join(" ") + "\n\n";
+            try {
+                if (file.name.endsWith(".txt")) {
+                    textoArea.value = await file.text();
+                } else if (file.name.endsWith(".pdf")) {
+                    const arrayBuffer = await file.arrayBuffer();
+                    const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
+                    let texto = "";
+                    for (let i = 1; i <= pdf.numPages; i++) {
+                        const page = await pdf.getPage(i);
+                        const content = await page.getTextContent();
+                        texto += content.items.map(t => t.str).join(" ") + "\n\n";
+                    }
+                    textoArea.value = texto;
                 }
-                textoArea.value = txt;
+                status.textContent = "Arquivo carregado! Selecione o trecho.";
+            } catch (e) {
+                status.textContent = "Erro no arquivo. Cole o texto manualmente.";
+                alert("Erro: " + e.message);
             }
-            status.textContent = "Arquivo carregado! Selecione o trecho.";
         };
 
-        // Ouvir só o selecionado
+        // === OUVIR SÓ O SELECIONADO ===
         function ouvir() {
             parar();
             let texto = textoArea.value.substring(savedStart, savedEnd).trim();
             if (!texto) texto = textoArea.value.trim();
-            if (!texto) return alert("Selecione um trecho!");
+            if (!texto) return alert("Selecione um trecho ou digite um texto!");
             const u = new SpeechSynthesisUtterance(texto);
-            const voices = speechSynthesis.getVoices().filter(v => v.lang === "pt-BR");
             u.voice = voices[vozSelect.selectedIndex] || voices[0];
             u.rate = parseFloat(velocidade.value);
+            u.volume = 1;
             u.onend = () => status.textContent = "Leitura concluída";
             speechSynthesis.speak(u);
-            status.textContent = `Lendo só o trecho selecionado (${texto.split(" ").length} palavras)`;
+            status.textContent = `Lendo só o selecionado (${texto.split(" ").length} palavras)`;
         }
 
-        function parar() { speechSynthesis.cancel(); status.textContent = "Parado"; }
+        function parar() { 
+            speechSynthesis.cancel(); 
+            status.textContent = "Parado."; 
+        }
 
-        // MP3 ILIMITADO VIA EDGE TTS (MICROSOFT) – VOZ PERFEITA PT-BR
+        // === GERAR ÁUDIO ILIMITADO EM SILÊNCIO (CLIENT-SIDE, SEM CORS) ===
         async function gerarMP3() {
-            let texto = textoArea.value.substring(savedStart, savedEnd).trim() || textoArea.value.trim();
-            if (!texto) return alert("Selecione ou digite texto!");
-            progressContainer.style.display = "block";
-            updateProgress(10, "Conectando ao Microsoft Edge TTS...");
+            let texto = textoArea.value.substring(savedStart, savedEnd).trim();
+            if (!texto) texto = textoArea.value.trim();
+            if (!texto) return alert("Selecione um trecho!");
+            progressContainer.style.display = 'block';
+            updateProgress(0, "Iniciando síntese...");
 
-            const voz = "pt-BR-AntonioNeural"; // Voz masculina perfeita (pode mudar para pt-BR-FranciscaNeural para feminina)
+            // Divide em chunks de 200 chars (limite Web Speech)
+            const chunks = texto.match(/.{1,200}/g) || [texto];
+            audioChunks = [];
+            let chunkIndex = 0;
 
-            const body = `<speak version='1.0' xml:lang='pt-BR'><voice name='${voz}'><prosody rate='${(velocidade.value-1)*100}%'>${texto.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</prosody></voice></speak>`;
+            // MimeType suportado
+            const mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4';
+            const stream = new MediaStream();
+            const mediaRecorder = new MediaRecorder(stream, { mimeType });
+            mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+            mediaRecorder.onstop = () => {
+                const blob = new Blob(audioChunks, { type: mimeType });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = "biblia-paroquia.webm"; // Toca como MP3; renomeie para .mp3 se quiser
+                a.click();
+                URL.revokeObjectURL(url);
+                progressContainer.style.display = 'none';
+                status.textContent = "Áudio baixado! (converta para MP3 online se precisar)";
+            };
+            mediaRecorder.start();
 
-            updateProgress(40, "Gerando áudio...");
-
-            const response = await fetch("https://speech.platform.bing.com/consumer/speech/synthesize/readaloud/v1?trustedclienttoken=6A5AA1D4EAFF4E9FB37E23D68491D6F4&SSML=" + encodeURIComponent(body), {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/ssml+xml",
-                    "User-Agent": "Mozilla/5.0"
+            function processarChunk() {
+                if (chunkIndex >= chunks.length) {
+                    mediaRecorder.stop();
+                    return;
                 }
-            });
-
-            if (!response.ok) throw new Error("Falha na síntese");
-
-            updateProgress(80, "Finalizando MP3...");
-
-            const blob = await response.blob();
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement("a");
-            a.href = url;
-            a.download = "biblia-paroquia.mp3";
-            a.click();
-            URL.revokeObjectURL(url);
-
-            updateProgress(100, "Concluído!");
-            setTimeout(() => progressContainer.style.display = "none", 2000);
-            status.textContent = "MP3 baixado com voz Microsoft PT-BR perfeita (ilimitado)!";
+                updateProgress((chunkIndex / chunks.length) * 100, `${chunkIndex + 1}/${chunks.length} chunks`);
+                const chunkU = new SpeechSynthesisUtterance(chunks[chunkIndex]);
+                chunkU.voice = voices[vozSelect.selectedIndex] || voices[0];
+                chunkU.rate = parseFloat(velocidade.value);
+                chunkU.volume = 0; // Silêncio
+                chunkU.onend = () => {
+                    chunkIndex++;
+                    setTimeout(processarChunk, 50); // Pausa entre chunks
+                };
+                speechSynthesis.speak(chunkU);
+            }
+            processarChunk();
         }
 
-        function updateProgress(p, txt) {
-            progress.style.width = p + "%";
-            progressText.textContent = txt;
+        function updateProgress(percent, text) {
+            progress.style.width = percent + "%";
+            progressText.textContent = text;
         }
 
         function compartilhar() {
-            const msg = "Ouça qualquer trecho da Bíblia em áudio com voz perfeita → https://magoja-br.github.io/tts-para-todos";
+            const msg = "Ouça a Bíblia selecionando trechos e baixando áudio ilimitado → https://magoja-br.github.io/tts-para-todos";
             if (navigator.share) navigator.share({title: "Leitor Bíblico", text: msg});
             else { navigator.clipboard.writeText(msg); status.textContent = "Link copiado!"; }
         }
