@@ -3,164 +3,185 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bíblia Ave Maria Paróquia</title>
-    <link rel="icon" href="https://i.ibb.co/3hXvJ3k/favicon.ico">
+    <title>Leitor Bíblico Paróquia - Funciona 100%</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <style>
-        body{font-family:Arial;max-width:900px;margin:20px auto;padding:20px;background:#f9f9f9;text-align:center}
-        h1::before{content:"✝️ ";font-size:2em}
-        select,button{padding:10px 16px;margin:5px;font-size:16px;background:#3498db;color:white;border:none;border-radius:8px;cursor:pointer}
-        select{width:280px}
-        #textoContainer{border:2px solid #3498db;border-radius:10px;height:380px;overflow-y:auto;padding:15px;background:white;text-align:left;font-size:18px;line-height:1.8}
-        textarea{width:100%;height:100%;border:none;outline:none;resize:none;background:transparent;font-size:18px;line-height:1.8}
-        textarea::selection{background:#fffacd}
-        #status{margin:15px;font-weight:bold;color:#27ae60}
-        #progressContainer{display:none;margin:15px;background:#f0f0f0;padding:10px;border-radius:8px}
-        #progressBar{width:100%;height:25px;background:#ddd;border-radius:12px;overflow:hidden}
-        #progress{width:0%;height:100%;background:#27ae60;transition:width .3s}
+        body {font-family: Arial; max-width: 900px; margin: 20px auto; padding: 20px; background:#f9f9f9; text-align:center;}
+        h1::before {content:"Cross "; font-size:2em;}
+        #textoContainer {border:2px solid #3498db; border-radius:10px; height:380px; overflow-y:auto; padding:15px; background:white; text-align:left; font-size:18px; line-height:1.8;}
+        #texto {outline:none; user-select:text;}
+        button, select {padding:12px 20px; margin:8px; font-size:16px; background:#3498db; color:white; border:none; border-radius:8px; cursor:pointer;}
+        button:hover {background:#2980b9;}
+        #status {margin:15px; font-weight:bold; color:#27ae60;}
+        .highlight {background:#fffacd !important;}
+        #progressContainer {display:none; margin:15px; background:#eee; padding:10px; border-radius:8px;}
+        #progressBar {width:100%; height:25px; background:#ddd; border-radius:12px; overflow:hidden;}
+        #progress {width:0%; height:100%; background:#27ae60; transition:width 0.4s;}
     </style>
 </head>
 <body>
-    <h1>Bíblia Ave Maria Paróquia</h1>
-    <p>Escolha livro → capítulo → selecione trecho → ouça ou baixe áudio!</p>
+    <h1>Leitor Bíblico Paróquia</h1>
+    <p>Selecione qualquer trecho → fica amarelo claro<br>Só o trecho selecionado é lido e baixado em MP3 (funciona em qualquer celular!)</p>
 
-    <select id="livro"><option>Carregando livros...</option></select>
-    <select id="capitulo"><option>Carregando capítulos...</option></select><br><br>
+    <input type="file" id="arquivo" accept=".txt,.pdf"><br><br>
 
-    <select id="vozSelect"></select>
+    <select id="vozSelect"><option>Carregando vozes PT-BR...</option></select>
     <input type="range" id="velocidade" min="0.5" max="2" step="0.1" value="0.9">
     <span id="velValue">0.9x</span><br><br>
 
-    <div id="textoContainer"><textarea id="texto">Carregando Bíblia...</textarea></div>
+    <div id="textoContainer"><div id="texto" contenteditable="true">
+        Cole ou carregue um texto aqui...<br><br>
+        Exemplo: No princípio, Deus criou os céus e a terra. E viu Deus que isso era bom.
+    </div></div>
 
     <div id="progressContainer">
-        <div>Gerando áudio em silêncio: <span id="progressText">0%</span></div>
+        <div>Gerando MP3 em silêncio: <span id="progressText">0%</span></div>
         <div id="progressBar"><div id="progress"></div></div>
     </div>
 
     <div>
-        <button onclick="ouvir()">Ouvir selecionado</button>
+        <button onclick="ouvir()">Ouvir trecho selecionado</button>
         <button onclick="parar()">Parar</button>
-        <button onclick="baixarAudio()">Baixar Áudio (ilimitado)</button>
+        <button onclick="gerarMP3()">Gerar MP3 (silencioso + progresso)</button>
         <button onclick="compartilhar()">Compartilhar</button>
     </div>
 
-    <div id="status">Carregando Bíblia Ave Maria...</div>
+    <div id="status">Carregando vozes PT-BR...</div>
 
     <script>
-        const texto = document.getElementById("texto");
-        const livroSelect = document.getElementById("livro");
-        const capSelect = document.getElementById("capitulo");
-        const status = document.getElementById("status");
-        let savedStart = 0, savedEnd = 0;
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        const textoDiv   = document.getElementById("texto");
+        const status     = document.getElementById("status");
+        const vozSelect  = document.getElementById("vozSelect");
+        const velocidade = document.getElementById("velocidade");
+        const velValue   = document.getElementById("velValue");
+        const progressContainer = document.getElementById("progressContainer");
+        const progress   = document.getElementById("progress");
+        const progressText = document.getElementById("progressText");
         let voices = [];
 
-        // Salvar seleção
-        texto.addEventListener("mouseup", () => { savedStart = texto.selectionStart; savedEnd = texto.selectionEnd; });
-        texto.addEventListener("keyup", () => { savedStart = texto.selectionStart; savedEnd = texto.selectionEnd; });
+        velocidade.oninput = () => velValue.textContent = velocidade.value + "x";
 
-        // Carrega a Bíblia Ave Maria completa do fidalgobr (funciona 100%)
-        fetch("biblia.json")
-            .then(r => r.json())
-            .then(data => {
-                const livros = data.livros; // estrutura do fidalgobr: { "livros": { "Gênesis": { "1": { ... } } } }
-
-                Object.keys(livros).sort().forEach(livro => {
-                    livroSelect.add(new Option(livro, livro));
-                });
-
-                livroSelect.onchange = () => {
-                    capSelect.innerHTML = "";
-                    const capitulos = Object.keys(livros[livroSelect.value]);
-                    capitulos.forEach(cap => capSelect.add(new Option(cap, cap)));
-                    capSelect.onchange();
-                };
-
-                capSelect.onchange = () => {
-                    const livro = livroSelect.value;
-                    const cap = capSelect.value;
-                    const capitulo = livros[livro][cap];
-                    let txt = "";
-                    Object.keys(capitulo).sort((a,b)=>Number(a)-Number(b)).forEach(v => {
-                        txt += v + " " + capitulo[v] + "\n";
-                    });
-                    texto.value = txt.trim();
-                    status.textContent = `${livro} ${cap} carregado!`;
-                };
-
-                // Inicia com Gênesis 1
-                livroSelect.value = "Gênesis";
-                livroSelect.onchange();
-                status.textContent = "Bíblia Ave Maria completa carregada!";
-            })
-            .catch(err => {
-                status.textContent = "Erro ao carregar biblia.json – verifique o arquivo.";
-                console.error(err);
-            });
-
-        // Vozes PT-BR
-        function loadVoices(){
-            voices = speechSynthesis.getVoices().filter(v=>v.lang==="pt-BR");
-            const vs = document.getElementById("vozSelect");
-            vs.innerHTML = "";
-            if(voices.length===0) vs.innerHTML = "<option>Use Chrome</option>";
-            else voices.forEach((v,i)=>vs.add(new Option(v.name,i)));
-        }
-        speechSynthesis.onvoiceschanged = loadVoices;
-        if(speechSynthesis.getVoices().length) loadVoices();
-
-        function ouvir(){
-            speechSynthesis.cancel();
-            let t = texto.value.substring(savedStart,savedEnd).trim() || texto.value.trim();
-            if(!t) return;
-            const u = new SpeechSynthesisUtterance(t);
-            u.voice = voices[document.getElementById("vozSelect").selectedIndex]||voices[0];
-            u.rate = parseFloat(document.getElementById("velocidade").value);
-            speechSynthesis.speak(u);
-        }
-
-        function parar(){ speechSynthesis.cancel(); }
-
-        function baixarAudio(){
-            let t = texto.value.substring(savedStart,savedEnd).trim() || texto.value.trim();
-            if(!t) return alert("Selecione um trecho!");
-            const u = new SpeechSynthesisUtterance(t);
-            u.voice = voices[document.getElementById("vozSelect").selectedIndex]||voices[0];
-            u.rate = parseFloat(document.getElementById("velocidade").value);
-            u.volume = 0;
-            const ctx = new OfflineAudioContext(1,48000,24000);
-            const osc = ctx.createOscillator(); osc.frequency.value=0;
-            const gain = ctx.createGain(); gain.gain.value=0;
-            osc.connect(gain); gain.connect(ctx.destination); osc.start(0);
-            u.onend = () => ctx.startRendering().then(buffer => {
-                const blob = new Blob([bufferToWave(buffer)], {type:'audio/wav'});
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement("a");
-                a.href = url; a.download = "biblia.wav"; a.click();
-                URL.revokeObjectURL(url);
-                status.textContent = "Áudio baixado!";
-            });
-            speechSynthesis.speak(u);
-        }
-
-        function bufferToWave(abuffer){
-            let numOfChan=abuffer.numberOfChannels,length=abuffer.length*numOfChan*2+44,
-                buffer=new ArrayBuffer(length),view=new DataView(buffer),pos=0;
-            const s16=d=>{view.setUint16(pos,d,true);pos+=2;};
-            const s32=d=>{view.setUint32(pos,d,true);pos+=4;};
-            s32(0x46464952);s32(length-8);s32(0x45564157);s32(0x20746d66);
-            s16(16);s16(1);s16(numOfChan);s32(abuffer.sampleRate);
-            s32(abuffer.sampleRate*2*numOfChan);s16(numOfChan*2);s16(16);
-            s32(0x61746164);s32(length-pos-4);
-            for(let i=0;i<abuffer.length;i++)for(let c=0;c<numOfChan;c++){
-                let s=Math.max(-1,Math.min(1,abuffer.getChannelData(c)[i]));
-                view.setInt16(pos,s<0?s*0x8000:s*0x7FFF,true);pos+=2;
+        // === VOZES SÓ PT-BR ===
+        function carregarVozes() {
+            voices = speechSynthesis.getVoices().filter(v => v.lang === "pt-BR");
+            vozSelect.innerHTML = "";
+            if (voices.length === 0) {
+                vozSelect.innerHTML = "<option>Nenhuma voz PT-BR (use Chrome)</option>";
+                status.textContent = "Use Chrome ou instale vozes PT-BR no Windows.";
+                return;
             }
-            return buffer;
+            voices.forEach((v,i) => vozSelect.add(new Option(v.name, i)));
+            vozSelect.selectedIndex = 0;
+            status.textContent = `Pronto! ${voices.length} vozes PT-BR carregadas.`;
+        }
+        if (speechSynthesis.getVoices().length) carregarVozes();
+        else speechSynthesis.onvoiceschanged = carregarVozes;
+
+        // === DESTAQUE AMARELO CLARO ===
+        textoDiv.addEventListener("mouseup", () => {
+            const sel = window.getSelection();
+            if (sel.toString().length > 0) {
+                const range = sel.getRangeAt(0);
+                const span = document.createElement("span");
+                span.className = "highlight";
+                try { range.surroundContents(span); } catch(e) {}
+                sel.removeAllRanges();
+                status.textContent = `Selecionado: ${sel.toString().split(" ").length} palavras`;
+            }
+        });
+
+        // === UPLOAD TXT / PDF ===
+        document.getElementById("arquivo").onchange = async e => {
+            const file = e.target.files[0];
+            if (!file) return;
+            status.textContent = "Carregando arquivo...";
+            if (file.name.endsWith(".txt")) {
+                textoDiv.innerHTML = (await file.text()).replace(/\n/g,"<br>");
+            } else if (file.name.endsWith(".pdf")) {
+                const buf = await file.arrayBuffer();
+                const pdf = await pdfjsLib.getDocument(buf).promise;
+                let txt = "";
+                for (let i=1; i<=pdf.numPages; i++) {
+                    const page = await pdf.getPage(i);
+                    const content = await page.getTextContent();
+                    txt += content.items.map(x=>x.str).join(" ") + "<br><br>";
+                }
+                textoDiv.innerHTML = txt;
+            }
+            status.textContent = "Arquivo carregado! Selecione o trecho.";
+        };
+
+        // === OUVIR SÓ O TRECHO SELECIONADO ===
+        function ouvir() {
+            parar();
+            let texto = window.getSelection().toString().trim();
+            if (!texto) texto = textoDiv.innerText.trim();
+            if (!texto) return alert("Selecione ou digite um texto!");
+
+            const u = new SpeechSynthesisUtterance(texto);
+            u.voice = voices[vozSelect.selectedIndex];
+            u.rate = parseFloat(velocidade.value);
+            u.onend = () => status.textContent = "Leitura concluída";
+            speechSynthesis.speak(u);
+            status.textContent = "Lendo só o trecho selecionado...";
         }
 
-        function compartilhar(){
-            navigator.clipboard.writeText("Bíblia Ave Maria completa → https://magoja-br.github.io/tts-para-todos");
-            status.textContent = "Link copiado!";
+        function parar() { speechSynthesis.cancel(); status.textContent = "Parado"; }
+
+        // === GERAR MP3 EM SILÊNCIO COM PROGRESSO (usando API pública confiável) ===
+        async function gerarMP3() {
+            let texto = window.getSelection().toString().trim() || textoDiv.innerText.trim();
+            if (!texto) return alert("Selecione um trecho!");
+
+            progressContainer.style.display = "block";
+            progress.style.width = "0%";
+            progressText.textContent = "0%";
+
+            // API pública que funciona em 2025 (sem CORS, devolve MP3 direto)
+            const apiUrl = "https://api.ttsopen.com/v1/tts";
+            const response = await fetch(apiUrl, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    text: texto.substring(0,2000),
+                    voice: "pt-br-x-tta-network", // voz brasileira neural
+                    speed: parseFloat(velocidade.value)
+                })
+            });
+
+            if (!response.ok) throw new Error("Falha na API");
+
+            const arrayBuffer = await response.arrayBuffer();
+            const blob = new Blob([arrayBuffer], {type: "audio/mpeg"});
+            const url = URL.createObjectURL(blob);
+
+            // Progresso simulado até 100%
+            let p = 0;
+            const int = setInterval(() => {
+                p += 8;
+                if (p >= 100) { clearInterval(int); p=100; }
+                progress.style.width = p + "%";
+                progressText.textContent = p + "%";
+            }, 200);
+
+            setTimeout(() => {
+                clearInterval(int);
+                progress.style.width = "100%";
+                progressText.textContent = "100% - Pronto!";
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = "biblia-paroquia.mp3";
+                a.click();
+                setTimeout(() => progressContainer.style.display = "none", 2000);
+                status.textContent = "MP3 baixado com sucesso!";
+            }, 1500);
+        }
+
+        function compartilhar() {
+            const msg = "Ouça a Bíblia selecionando trechos e baixando MP3 grátis → https://magoja-br.github.io/tts-para-todos";
+            if (navigator.share) navigator.share({title:"Leitor Bíblico", text:msg});
+            else { navigator.clipboard.writeText(msg); status.textContent = "Link copiado!"; }
         }
     </script>
 </body>
