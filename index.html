@@ -18,7 +18,7 @@
 </head>
 <body>
     <h1>Bíblia Ave Maria Paróquia</h1>
-    <p>Escolha livro → capítulo → selecione trecho → ouça ou baixe áudio ilimitado!</p>
+    <p>Escolha livro → capítulo → selecione trecho → ouça ou baixe áudio!</p>
 
     <select id="livro"></select>
     <select id="capitulo"></select><br><br>
@@ -36,41 +36,54 @@
         <button onclick="compartilhar()">Compartilhar</button>
     </div>
 
-    <div id="status">Carregando Bíblia e vozes...</div>
+    <div id="status">Carregando Bíblia...</div>
 
-    <script src="biblia.js"></script>
+    <!-- Carrega seu biblia.json exatamente como você enviou -->
+    <script src="biblia.json"></script>
     <script>
         const texto = document.getElementById("texto");
         const livroSelect = document.getElementById("livro");
         const capSelect = document.getElementById("capitulo");
         const status = document.getElementById("status");
-        let start = 0, end = 0;
+        let savedStart = 0, savedEnd = 0;
+        let voices = [];
 
-        // Carrega livros
-        Object.keys(window.biblia).sort().forEach(l => livroSelect.add(new Option(l, l)));
+        // Salvar seleção
+        texto.addEventListener("mouseup", () => { savedStart = texto.selectionStart; savedEnd = texto.selectionEnd; });
+        texto.addEventListener("keyup", () => { savedStart = texto.selectionStart; savedEnd = texto.selectionEnd; });
+
+        // Carrega a Bíblia do seu arquivo biblia.json (exatamente o formato que você enviou)
+        const livros = bibliaData.antigoTestamento; // seu arquivo tem isso
+
+        livros.forEach(livro => {
+            livroSelect.add(new Option(livro.nome, livro.nome));
+        });
 
         livroSelect.onchange = () => {
             capSelect.innerHTML = "";
-            Object.keys(window.biblia[livroSelect.value]).forEach(c => capSelect.add(new Option(c, c)));
+            const livroAtual = livros.find(l => l.nome === livroSelect.value);
+            livroAtual.capitulos.forEach(cap => {
+                capSelect.add(new Option(cap.capitulo, cap.capitulo));
+            });
             capSelect.onchange();
         };
 
         capSelect.onchange = () => {
-            const livro = livroSelect.value;
-            const cap = capSelect.value;
-            texto.value = window.biblia[livro][cap] || "Capítulo não encontrado.";
-            status.textContent = `${livro} ${cap} carregado!`;
+            const livroAtual = livros.find(l => l.nome === livroSelect.value);
+            const capituloAtual = livroAtual.capitulos.find(c => c.capitulo == capSelect.value);
+            let txt = "";
+            capituloAtual.versiculos.forEach(v => {
+                txt += v.versiculo + " " + v.texto + "\n";
+            });
+            texto.value = txt.trim();
+            status.textContent = `${livroAtual.nome} ${capituloAtual.capitulo} carregado!`;
         };
 
+        // Carrega Gênesis 1 ao iniciar
         livroSelect.value = "Gênesis";
         livroSelect.onchange();
 
-        // Salvar seleção
-        texto.addEventListener("mouseup", () => { start = texto.selectionStart; end = texto.selectionEnd; });
-        texto.addEventListener("keyup", () => { start = texto.selectionStart; end = texto.selectionEnd; });
-
         // Vozes PT-BR
-        let voices = [];
         function loadVoices(){
             voices = speechSynthesis.getVoices().filter(v=>v.lang==="pt-BR");
             const vs = document.getElementById("vozSelect");
@@ -83,7 +96,7 @@
 
         function ouvir(){
             speechSynthesis.cancel();
-            let t = texto.value.substring(start,end).trim() || texto.value.trim();
+            let t = texto.value.substring(savedStart,savedEnd).trim() || texto.value.trim();
             if(!t) return;
             const u = new SpeechSynthesisUtterance(t);
             u.voice = voices[document.getElementById("vozSelect").selectedIndex]||voices[0];
@@ -94,7 +107,7 @@
         function parar(){ speechSynthesis.cancel(); }
 
         function baixarAudio(){
-            let t = texto.value.substring(start,end).trim() || texto.value.trim();
+            let t = texto.value.substring(savedStart,savedEnd).trim() || texto.value.trim();
             if(!t) return alert("Selecione um trecho!");
             const u = new SpeechSynthesisUtterance(t);
             u.voice = voices[document.getElementById("vozSelect").selectedIndex]||voices[0];
@@ -116,7 +129,6 @@
         }
 
         function bufferToWave(abuffer){
-            // (código bufferToWave completo – funciona 100%)
             let numOfChan=abuffer.numberOfChannels,length=abuffer.length*numOfChan*2+44,
                 buffer=new ArrayBuffer(length),view=new DataView(buffer),pos=0;
             const s16=d=>{view.setUint16(pos,d,true);pos+=2;};
@@ -133,7 +145,7 @@
         }
 
         function compartilhar(){
-            navigator.clipboard.writeText("Bíblia Ave Maria completa → https://magoja-br.github.io/tts-para-todos");
+            navigator.clipboard.writeText("Bíblia Ave Maria → https://magoja-br.github.io/tts-para-todos");
             status.textContent = "Link copiado!";
         }
     </script>
