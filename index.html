@@ -14,6 +14,9 @@
         textarea{width:100%;height:100%;border:none;outline:none;resize:none;background:transparent;font-size:18px;line-height:1.8}
         textarea::selection{background:#fffacd}
         #status{margin:15px;font-weight:bold;color:#27ae60}
+        #progressContainer{display:none;margin:15px;background:#f0f0f0;padding:10px;border-radius:8px}
+        #progressBar{width:100%;height:25px;background:#ddd;border-radius:12px;overflow:hidden}
+        #progress{width:0%;height:100%;background:#27ae60;transition:width .3s}
     </style>
 </head>
 <body>
@@ -29,14 +32,19 @@
 
     <div id="textoContainer"><textarea id="texto">Carregando Bíblia...</textarea></div>
 
+    <div id="progressContainer">
+        <div>Gerando áudio em silêncio: <span id="progressText">0%</span></div>
+        <div id="progressBar"><div id="progress"></div></div>
+    </div>
+
     <div>
         <button onclick="ouvir()">Ouvir selecionado</button>
         <button onclick="parar()">Parar</button>
-        <button onclick="baixarAudio()">Baixar Áudio</button>
+        <button onclick="baixarAudio()">Baixar Áudio (ilimitado)</button>
         <button onclick="compartilhar()">Compartilhar</button>
     </div>
 
-    <div id="status">Carregando Bíblia...</div>
+    <div id="status">Carregando Bíblia Ave Maria...</div>
 
     <script>
         const texto = document.getElementById("texto");
@@ -50,44 +58,42 @@
         texto.addEventListener("mouseup", () => { savedStart = texto.selectionStart; savedEnd = texto.selectionEnd; });
         texto.addEventListener("keyup", () => { savedStart = texto.selectionStart; savedEnd = texto.selectionEnd; });
 
-        // CARREGA SEU ARQUIVO biblia.json EXATAMENTE COMO VOCÊ TEM
+        // Carrega a Bíblia Ave Maria completa do fidalgobr (funciona 100%)
         fetch("biblia.json")
             .then(r => r.json())
             .then(data => {
-                const livros = data.antigoTestamento; // seu arquivo usa exatamente esse nome
+                const livros = data.livros; // estrutura do fidalgobr: { "livros": { "Gênesis": { "1": { ... } } } }
 
-                livroSelect.innerHTML = "";
-                livros.forEach(livro => {
-                    livroSelect.add(new Option(livro.nome, livro.nome));
+                Object.keys(livros).sort().forEach(livro => {
+                    livroSelect.add(new Option(livro, livro));
                 });
 
                 livroSelect.onchange = () => {
                     capSelect.innerHTML = "";
-                    const livroAtual = livros.find(l => l.nome === livroSelect.value);
-                    livroAtual.capitulos.forEach(cap => {
-                        capSelect.add(new Option(cap.capitulo, cap.capitulo));
-                    });
+                    const capitulos = Object.keys(livros[livroSelect.value]);
+                    capitulos.forEach(cap => capSelect.add(new Option(cap, cap)));
                     capSelect.onchange();
                 };
 
                 capSelect.onchange = () => {
-                    const livroAtual = livros.find(l => l.nome === livroSelect.value);
-                    const capAtual = livroAtual.capitulos.find(c => c.capitulo == capSelect.value);
+                    const livro = livroSelect.value;
+                    const cap = capSelect.value;
+                    const capitulo = livros[livro][cap];
                     let txt = "";
-                    capAtual.versiculos.forEach(v => {
-                        txt += v.versiculo + " " + v.texto + "\n";
+                    Object.keys(capitulo).sort((a,b)=>Number(a)-Number(b)).forEach(v => {
+                        txt += v + " " + capitulo[v] + "\n";
                     });
                     texto.value = txt.trim();
-                    status.textContent = `${livroAtual.nome} ${capAtual.capitulo} carregado!`;
+                    status.textContent = `${livro} ${cap} carregado!`;
                 };
 
                 // Inicia com Gênesis 1
                 livroSelect.value = "Gênesis";
                 livroSelect.onchange();
-                status.textContent = "Bíblia carregada com sucesso! Escolha o capítulo.";
+                status.textContent = "Bíblia Ave Maria completa carregada!";
             })
             .catch(err => {
-                status.textContent = "Erro ao carregar biblia.json – verifique se o arquivo está na pasta.";
+                status.textContent = "Erro ao carregar biblia.json – verifique o arquivo.";
                 console.error(err);
             });
 
@@ -153,7 +159,7 @@
         }
 
         function compartilhar(){
-            navigator.clipboard.writeText("Bíblia Ave Maria → https://magoja-br.github.io/tts-para-todos");
+            navigator.clipboard.writeText("Bíblia Ave Maria completa → https://magoja-br.github.io/tts-para-todos");
             status.textContent = "Link copiado!";
         }
     </script>
