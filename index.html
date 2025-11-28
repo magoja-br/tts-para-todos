@@ -6,8 +6,8 @@
     <title>Bíblia Ave Maria Paróquia</title>
     <style>
         body{font-family:Arial;max-width:900px;margin:20px auto;padding:20px;background:#f9f9f9;text-align:center}
-        h1::before{content:"Cross ";font-size:2em}
-        select,button{padding:10px 16px;margin:5px;font-size:16px;background:#3498db;color:white;border:none;border-radius:8px;cursor:pointer}
+        h1::before{content:"✝️ ";font-size:2em}
+        select, button{padding:10px 16px;margin:5px;font-size:16px;background:#3498db;color:white;border:none;border-radius:8px;cursor:pointer}
         select{width:280px}
         #textoContainer{border:2px solid #3498db;border-radius:10px;height:380px;overflow-y:auto;padding:15px;background:white;text-align:left;font-size:18px;line-height:1.8}
         textarea{width:100%;height:100%;border:none;outline:none;resize:none;background:transparent;font-size:18px;line-height:1.8}
@@ -20,7 +20,7 @@
 </head>
 <body>
     <h1>Bíblia Ave Maria Paróquia</h1>
-    <p>Escolha o livro → capítulo → selecione o trecho → ouça ou baixe áudio!</p>
+    <p>Escolha o livro → capítulo → selecione o trecho → ouça ou baixe áudio ilimitado!</p>
 
     <select id="livro"></select>
     <select id="capitulo"></select><br><br>
@@ -39,7 +39,7 @@
     <div>
         <button onclick="ouvir()">Ouvir só selecionado</button>
         <button onclick="parar()">Parar</button>
-        <button onclick="gerarAudio()">Baixar Áudio</button>
+        <button onclick="gerarAudio()">Baixar Áudio (ilimitado)</button>
         <button onclick="compartilhar()">Compartilhar</button>
     </div>
 
@@ -53,8 +53,8 @@
         let savedStart = 0, savedEnd = 0;
         let biblia = {};
 
-        // BÍBLIA AVE MARIA COMPLETA (link corrigido e testado)
-        fetch("https://cdn.jsdelivr.net/gh/wldys/biblia-ave-maria@bible/biblia.json")
+        // BÍBLIA AVE MARIA COMPLETA (link corrigido para repositório real)
+        fetch("https://raw.githubusercontent.com/fidalgobr/bibliaAveMariaJSON/main/bibliaAveMaria.json")
             .then(r => r.json())
             .then(data => {
                 biblia = data;
@@ -72,7 +72,7 @@
                     const livro = livroSelect.value;
                     const cap = capituloSelect.value;
                     textoArea.value = biblia[livro][cap];
-                    status.textContent = `${livro} ${cap} carregado!`;
+                    status.textContent = `${livro} ${cap} carregado! Selecione o trecho para ouvir.`;
                 };
                 livroSelect.value = "Gênesis";
                 livroSelect.onchange();
@@ -112,7 +112,7 @@
 
         function parar() { speechSynthesis.cancel(); status.textContent = "Parado"; }
 
-        // GERA ÁUDIO (mesmo código comprovado)
+        // GERA ÁUDIO ILIMITADO EM SILÊNCIO (código comprovado)
         async function gerarAudio() {
             let texto = textoArea.value.substring(savedStart, savedEnd).trim() || textoArea.value.trim();
             if (!texto) return alert("Selecione um trecho!");
