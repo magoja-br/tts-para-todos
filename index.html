@@ -2,157 +2,416 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Leitor Bíblico Paróquia - Funciona 100%</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#ffffff">
+    <title>Leitor Android Pro</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
     <style>
-        body { font-family: Arial; max-width: 900px; margin: 20px auto; padding: 20px; background: #f9f9f9; text-align: center; }
-        h1 { color: #2c3e50; }
-        h1::before { content: "✝️ "; font-size: 2em; }
-        #texto { width: 100%; height: 340px; padding: 15px; font-size: 18px; line-height: 1.8; border: 2px solid #3498db; border-radius: 10px; background: white; }
-        button, select { padding: 12px 20px; margin: 8px; font-size: 16px; background: #3498db; color: white; border: none; border-radius: 8px; cursor: pointer; }
-        button:hover { background: #2980b9; }
-        #status { margin: 15px; font-weight: bold; color: #27ae60; }
-        .highlight { background: #fffacd !important; }
+        :root {
+            --primary: #2563eb; /* Azul App */
+            --bg: #ffffff;
+            --surface: #f8fafc;
+            --text: #1e293b;
+            --highlight: #fde047;
+            --nav-height: 60px;
+        }
+
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+        body {
+            margin: 0; padding: 0;
+            background: var(--bg); color: var(--text);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            padding-top: var(--nav-height); /* Espaço para a barra fixa */
+        }
+
+        /* --- BARRA FIXA MINIMALISTA --- */
+        .navbar {
+            position: fixed; top: 0; left: 0; right: 0;
+            height: var(--nav-height);
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid #e2e8f0;
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 0 15px;
+            z-index: 1000;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+        }
+
+        /* Controles Principais (Sempre visíveis) */
+        .nav-controls {
+            display: flex; gap: 15px; align-items: center;
+        }
+
+        .btn-icon {
+            background: none; border: none; cursor: pointer;
+            font-size: 24px; color: #475569; padding: 5px;
+            display: flex; align-items: center; justify-content: center;
+            border-radius: 50%; transition: background 0.2s;
+            width: 40px; height: 40px;
+        }
+        .btn-icon:active { background: #e2e8f0; }
+        .btn-play { color: var(--primary); font-size: 32px; }
+        .btn-menu { color: #334155; }
+
+        /* --- MENU DE CONFIGURAÇÕES (Escondido) --- */
+        .settings-drawer {
+            position: fixed; top: var(--nav-height); left: 0; right: 0;
+            background: white;
+            border-bottom: 1px solid #e2e8f0;
+            padding: 20px;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+            transform: translateY(-150%); /* Escondido pra cima */
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            z-index: 900;
+            max-height: 80vh; overflow-y: auto;
+        }
+        .settings-drawer.open { transform: translateY(0); }
+
+        /* Elementos do Menu */
+        .setting-group { margin-bottom: 15px; }
+        .setting-label { display: block; font-size: 13px; color: #64748b; margin-bottom: 5px; font-weight: 600; text-transform: uppercase; }
+        
+        /* Input de Arquivo Bonito */
+        .file-upload {
+            display: block; width: 100%; padding: 12px;
+            background: #eff6ff; color: var(--primary);
+            border: 1px dashed #bfdbfe; border-radius: 8px;
+            text-align: center; font-weight: 600; cursor: pointer;
+        }
+        
+        select, input[type=text] {
+            width: 100%; padding: 12px;
+            border: 1px solid #cbd5e1; border-radius: 8px;
+            background: white; font-size: 16px;
+            appearance: none; /* Remove estilo nativo feio */
+        }
+
+        /* Checkbox Estilizado */
+        .toggle-row { display: flex; align-items: center; justify-content: space-between; background: #f8fafc; padding: 10px; border-radius: 8px; }
+        .toggle-switch { position: relative; display: inline-block; width: 44px; height: 24px; }
+        .toggle-switch input { opacity: 0; width: 0; height: 0; }
+        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #cbd5e1; transition: .4s; border-radius: 34px; }
+        .slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%; }
+        input:checked + .slider { background-color: var(--primary); }
+        input:checked + .slider:before { transform: translateX(20px); }
+
+        /* --- ÁREA DE LEITURA --- */
+        #container-leitura {
+            padding: 20px;
+            font-size: 19px; line-height: 1.6;
+            min-height: 80vh;
+            padding-bottom: 100px; /* Espaço extra no fim */
+        }
+        
+        /* Estilos de Frase */
+        .sentence {
+            padding: 4px 2px; border-radius: 4px;
+            transition: background 0.1s;
+        }
+        .sentence.active {
+            background-color: var(--highlight); color: black;
+            font-weight: 500;
+            box-shadow: 0 0 0 4px var(--highlight); /* Expande a cor */
+            border-radius: 4px;
+        }
+
+        /* Modo Lista */
+        .list-mode .sentence {
+            display: block; padding: 12px;
+            background: white; border: 1px solid #f1f5f9;
+            margin-bottom: 8px; border-radius: 8px;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+        }
+        .list-mode .sentence.active {
+            border-color: #facc15; box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        }
+
+        /* Loading */
+        .loading-overlay {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(255,255,255,0.95); z-index: 2000;
+            display: none; align-items: center; justify-content: center;
+            flex-direction: column; color: var(--primary); font-weight: bold;
+        }
+
+        /* Barra de Progresso Fina no Topo */
+        #progress-bar {
+            position: absolute; bottom: 0; left: 0; height: 3px;
+            background: var(--primary); width: 0%; transition: width 0.3s;
+        }
     </style>
 </head>
 <body>
-    <h1>Leitor Bíblico Paróquia</h1>
-    <p>Selecione qualquer trecho → fica amarelo claro<br>Ouça com voz brasileira → Baixe MP3 com som alto!</p>
 
-    <input type="file" id="arquivo" accept=".txt,.pdf"><br><br>
+    <div id="loading" class="loading-overlay">
+        <div style="font-size: 40px; margin-bottom: 20px;">🔄</div>
+        <div>Processando...</div>
+    </div>
 
-    <select id="vozSelect"></select>
-    <input type="range" id="velocidade" min="0.5" max="2" step="0.1" value="0.9">
-    <span id="velValue">0.9x</span><br><br>
+    <nav class="navbar">
+        <button class="btn-icon btn-menu" onclick="toggleMenu()">☰</button>
 
-    <div id="textoContainer">
-        <div id="texto" contenteditable="true">
-            Cole ou carregue um texto aqui...<br><br>
-            Exemplo: No princípio, Deus criou os céus e a terra.
+        <div class="nav-controls">
+            <button class="btn-icon" onclick="mudarFrase(-1)">⏮</button>
+            <button id="btnPlay" class="btn-icon btn-play" onclick="togglePlay()">▶</button>
+            <button class="btn-icon" onclick="mudarFrase(1)">⏭</button>
+        </div>
+
+        <div id="progress-bar"></div>
+    </nav>
+
+    <div id="settingsDrawer" class="settings-drawer">
+        
+        <div class="setting-group">
+            <span class="setting-label">1. Arquivo</span>
+            <label for="arquivo" class="file-upload">📂 Toque para abrir PDF ou TXT</label>
+            <input type="file" id="arquivo" accept=".txt,.pdf" style="display:none">
+        </div>
+
+        <div class="setting-group">
+            <span class="setting-label">2. Modo de Leitura</span>
+            <div class="toggle-row">
+                <span>Modo Lista (Ladainha/Poesia)</span>
+                <label class="toggle-switch">
+                    <input type="checkbox" id="checkModoLista" onchange="reprocessarArquivo()">
+                    <span class="slider"></span>
+                </label>
+            </div>
+        </div>
+
+        <div class="setting-group">
+            <span class="setting-label">3. Voz</span>
+            <select id="vozSelect"></select>
+        </div>
+
+        <div class="setting-group">
+            <span class="setting-label">4. Velocidade: <span id="velValue">1.0x</span></span>
+            <input type="range" id="velocidade" min="0.5" max="2" step="0.1" value="1" style="width:100%">
+        </div>
+
+        <div class="setting-group">
+            <span class="setting-label">5. Buscar</span>
+            <input type="text" id="searchInput" placeholder="Digite para buscar..." onkeyup="if(event.key === 'Enter') buscarTexto()">
+        </div>
+
+        <button onclick="toggleMenu()" style="width:100%; padding:15px; background:#e2e8f0; border:none; border-radius:8px; font-weight:bold; margin-top:10px;">Fechar Menu</button>
+    </div>
+
+    <div id="container-leitura">
+        <div style="text-align:center; padding-top: 50px; color:#94a3b8;">
+            <h3>Bem-vindo!</h3>
+            <p>Toque no menu <b>☰</b> acima<br>para carregar seu arquivo.</p>
         </div>
     </div>
 
-    <div>
-        <button onclick="ouvir()">Ouvir trecho selecionado</button>
-        <button onclick="parar()">Parar</button>
-        <button onclick="baixarMP3()">Baixar MP3 (com som)</button>
-        <button onclick="compartilhar()">Compartilhar</button>
-    </div>
-
-    <div id="status">Carregando vozes...</div>
-
     <script>
-        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-        const textoDiv = document.getElementById("texto");
-        const status = document.getElementById("status");
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+
+        const container = document.getElementById("container-leitura");
+        const btnPlay = document.getElementById("btnPlay");
+        const loadingEl = document.getElementById("loading");
         const vozSelect = document.getElementById("vozSelect");
-        const velocidade = document.getElementById("velocidade");
-        const velValue = document.getElementById("velValue");
-        let utterance = null;
+        const drawer = document.getElementById("settingsDrawer");
+        const progressBar = document.getElementById("progress-bar");
+        const checkModoLista = document.getElementById("checkModoLista");
+        
+        let synth = window.speechSynthesis;
         let voices = [];
+        let frasesElements = [];
+        let indiceAtual = 0;
+        let isLendo = false;
+        let isPausado = false;
+        let ultimoConteudoCarregado = null;
+        window.utteranceAtual = null; // Trava de memória
 
-        velocidade.oninput = () => velValue.textContent = velocidade.value + "x";
-
-        // === CARREGAR VOZES ===
-        function carregarVozes() {
-            voices = speechSynthesis.getVoices();
-            vozSelect.innerHTML = "";
-            voices.forEach((v, i) => {
-                if (v.lang.includes("pt") || i < 10) {
-                    const opt = new Option(v.name + " (" + v.lang + ")", i);
-                    if (v.lang.includes("pt-BR")) opt.selected = true;
-                    vozSelect.add(opt);
-                }
-            });
-            status.textContent = "Pronto! Selecione um trecho e ouça.";
+        // --- UI FUNÇÕES ---
+        function toggleMenu() {
+            drawer.classList.toggle("open");
         }
-        if (speechSynthesis.getVoices().length) carregarVozes();
-        else speechSynthesis.onvoiceschanged = carregarVozes;
 
-        // === DESTAQUE AMARELO CLARO (REAL) ===
-        textoDiv.addEventListener("mouseup", () => {
-            const sel = window.getSelection();
-            if (sel.rangeCount > 0) {
-                const range = sel.getRangeAt(0);
-                if (range.toString().length > 0) {
-                    const span = document.createElement("span");
-                    span.className = "highlight";
-                    try { range.surroundContents(span); } catch(e) {}
-                    sel.removeAllRanges();
-                    status.textContent = `Trecho destacado: ${range.toString().split(" ").length} palavras`;
-                }
-            }
-        });
-
-        // === UPLOAD TXT/PDF ===
-        document.getElementById("arquivo").onchange = async function() {
-            const file = this.files[0];
-            if (!file) return;
-            status.textContent = "Carregando...";
-            if (file.name.endsWith(".txt")) {
-                textoDiv.innerHTML = await file.text();
-            } else if (file.name.endsWith(".pdf")) {
-                const arrayBuffer = await file.arrayBuffer();
-                const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
-                let texto = "";
-                for (let i = 1; i <= pdf.numPages; i++) {
-                    const page = await pdf.getPage(i);
-                    const content = await page.getTextContent();
-                    texto += content.items.map(t => t.str).join(" ") + "<br><br>";
-                }
-                textoDiv.innerHTML = texto;
-            }
-            status.textContent = "Arquivo carregado! Selecione o trecho.";
+        document.getElementById("velocidade").oninput = function() {
+            document.getElementById("velValue").textContent = this.value + "x";
         };
 
-        // === OUVIR ===
-        function ouvir() {
-            parar();
-            let texto = window.getSelection().toString();
-            if (!texto) texto = textoDiv.innerText || textoDiv.textContent;
-            if (!texto.trim()) return alert("Selecione ou digite um texto!");
+        // --- CARREGAR VOZES ---
+        function loadVoices() {
+            let allVoices = synth.getVoices();
+            if(allVoices.length === 0) return;
+            allVoices.sort((a, b) => a.name.localeCompare(b.name));
+            voices = allVoices; 
+            vozSelect.innerHTML = "";
 
-            utterance = new SpeechSynthesisUtterance(texto);
-            utterance.voice = voices[vozSelect.value];
-            utterance.rate = parseFloat(velocidade.value);
-            utterance.volume = 1;
+            const groupBR = document.createElement("optgroup"); groupBR.label = "🇧🇷 BRASIL";
+            const groupPT = document.createElement("optgroup"); groupPT.label = "🇵🇹 PORTUGAL";
+            const groupOther = document.createElement("optgroup"); groupOther.label = "🌍 OUTROS";
 
-            utterance.onend = () => status.textContent = "Leitura concluída";
-            speechSynthesis.speak(utterance);
-            status.textContent = "Lendo...";
+            let hasBR = false;
+
+            voices.forEach((v, i) => {
+                let name = v.name.replace(/Microsoft|Google|Portuguese|\(Brazil\)|\(Portugal\)/g, "").trim();
+                const opt = new Option(name, i);
+                if (v.lang.includes("BR") || v.lang === "pt-br") { groupBR.appendChild(opt); hasBR = true; }
+                else if (v.lang.includes("PT")) groupPT.appendChild(opt);
+                else groupOther.appendChild(opt);
+            });
+
+            if(groupBR.children.length) vozSelect.appendChild(groupBR);
+            if(groupPT.children.length) vozSelect.appendChild(groupPT);
+            if(groupOther.children.length) vozSelect.appendChild(groupOther);
+
+            if(hasBR && !vozSelect.value) vozSelect.selectedIndex = 0;
+        }
+        loadVoices();
+        if(speechSynthesis.onvoiceschanged !== undefined) speechSynthesis.onvoiceschanged = loadVoices;
+
+        // --- LEITURA E CONTROLE ---
+        function togglePlay() {
+            if(frasesElements.length === 0) {
+                toggleMenu(); // Abre o menu pra pessoa carregar
+                return alert("Carregue um arquivo primeiro!");
+            }
+            if (!isLendo && !isPausado) lerIndice(indiceAtual);
+            else if (isLendo && !isPausado) {
+                synth.pause(); isPausado = true; updateBtn("play");
+            } else if (isPausado) {
+                synth.resume(); isPausado = false; updateBtn("pause");
+            }
         }
 
-        function parar() { speechSynthesis.cancel(); status.textContent = "Parado"; }
-
-        // === BAIXAR MP3 COM SOM (usando TTS direto + blob) ===
-        function baixarMP3() {
-            let texto = window.getSelection().toString() || textoDiv.innerText;
-            if (!texto.trim()) return alert("Selecione um trecho!");
-
-            status.textContent = "Gerando MP3 com som... aguarde";
-
-            const utterance = new SpeechSynthesisUtterance(texto);
-            utterance.voice = voices[vozSelect.value];
-            utterance.rate = parseFloat(velocidade.value);
-
-            // Técnica que FUNCIONA em 2025: usar um serviço gratuito temporário (sem instalar nada)
-            const encoded = encodeURIComponent(texto.substring(0, 3000)); // limite seguro
-            const voz = voices[vozSelect.value].name.replace(/ /g, "+");
-            const url = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encoded}&tl=pt-br&client=tw-ob&ttsspeed=1`;
-
-            const a = document.createElement("a");
-            a.href = url;
-            a.download = "biblia-paroquia.mp3";
-            a.click();
-
-            status.textContent = "MP3 baixado com som alto! (Google TTS)";
+        function updateBtn(state) {
+            // state: 'play' mostra botão play (pra retomar), 'pause' mostra pause (pra parar)
+            if(state === "pause") {
+                btnPlay.textContent = "⏸"; 
+                btnPlay.style.color = "#f59e0b"; // Laranja pausando
+            } else {
+                btnPlay.textContent = "▶";
+                btnPlay.style.color = "#2563eb"; // Azul normal
+            }
         }
 
-        function compartilhar() {
-            const msg = "Ouça a Bíblia com destaque amarelo e baixe MP3 grátis → https://magoja-br.github.io/tts-para-todos";
-            if (navigator.share) navigator.share({title: "Leitor Bíblico", text: msg});
-            else { navigator.clipboard.writeText(msg); status.textContent = "Link copiado!"; }
+        function mudarFrase(dir) {
+            let novo = indiceAtual + dir;
+            if(novo >= 0 && novo < frasesElements.length) lerIndice(novo);
+        }
+
+        function lerIndice(index) {
+            if(index >= frasesElements.length) return;
+            synth.cancel();
+            
+            // Limpa destaque anterior
+            if(frasesElements[indiceAtual]) frasesElements[indiceAtual].classList.remove("active");
+            
+            indiceAtual = index;
+            const el = frasesElements[index];
+            el.classList.add("active");
+            
+            // Scroll centralizado com margem do header
+            const headerOffset = 70;
+            const elementPosition = el.getBoundingClientRect().top;
+            const offsetPosition = elementPosition + window.pageYOffset - (window.innerHeight / 2);
+            window.scrollTo({ top: offsetPosition, behavior: "smooth" });
+
+            // Atualiza barra de progresso
+            const progresso = ((index + 1) / frasesElements.length) * 100;
+            progressBar.style.width = progresso + "%";
+
+            // Fala
+            const utter = new SpeechSynthesisUtterance(el.textContent);
+            const selectedVoice = voices[vozSelect.value];
+            if(selectedVoice) {
+                utter.voice = selectedVoice;
+                utter.lang = selectedVoice.lang; // Trava idioma
+            }
+            utter.rate = parseFloat(document.getElementById("velocidade").value);
+            
+            utter.onstart = () => { isLendo = true; isPausado = false; updateBtn("pause"); };
+            utter.onend = () => { if(isLendo) lerIndice(index + 1); };
+            
+            window.utteranceAtual = utter; // Fixa na memória
+            synth.speak(utter);
+        }
+
+        // --- ARQUIVOS ---
+        function reprocessarArquivo() {
+            if(ultimoConteudoCarregado) renderizarTexto(ultimoConteudoCarregado);
+        }
+
+        document.getElementById("arquivo").onchange = async e => {
+            const file = e.target.files[0];
+            if(!file) return;
+            toggleMenu(); // Fecha menu automaticamente
+            loadingEl.style.display = "flex";
+            
+            try {
+                let txt = "";
+                if(file.name.toLowerCase().endsWith(".txt")) {
+                    txt = await file.text();
+                } else {
+                    const buffer = await file.arrayBuffer();
+                    const pdf = await pdfjsLib.getDocument(buffer).promise;
+                    for(let i=1; i<=pdf.numPages; i++) {
+                        const page = await pdf.getPage(i);
+                        const content = await page.getTextContent();
+                        let lastY = -1;
+                        content.items.forEach(item => {
+                            if(lastY!==-1 && Math.abs(item.transform[5]-lastY)>10) txt+="\n";
+                            txt += item.str + " ";
+                            lastY = item.transform[5];
+                        });
+                        txt += "\n\n";
+                    }
+                }
+                ultimoConteudoCarregado = txt;
+                renderizarTexto(txt);
+            } catch(err) { alert("Erro: " + err); } 
+            finally { loadingEl.style.display = "none"; }
+        };
+
+        function renderizarTexto(texto) {
+            container.innerHTML = "";
+            frasesElements = [];
+            indiceAtual = 0;
+            
+            const isList = checkModoLista.checked;
+            container.className = isList ? "list-mode" : "";
+
+            if (isList) {
+                texto.split("\n").forEach(line => {
+                    if(line.trim()) createEl(line.trim(), container);
+                });
+            } else {
+                texto.split(/\n\s*\n/).forEach(block => {
+                    if(!block.trim()) return;
+                    const div = document.createElement("div");
+                    div.style.marginBottom = "20px";
+                    block.replace(/\s+/g," ").match(/[^.!?]+[.!?]+(\s|$)|[^.!?]+$/g || [block])
+                        ?.forEach(s => createEl(s, div));
+                    container.appendChild(div);
+                });
+            }
+        }
+
+        function createEl(txt, parent) {
+            if(!txt.trim()) return;
+            const span = document.createElement("span");
+            span.className = "sentence";
+            span.textContent = txt + " ";
+            span.onclick = () => lerIndice(frasesElements.indexOf(span));
+            parent.appendChild(span);
+            frasesElements.push(span);
+        }
+
+        // Busca Simples
+        function buscarTexto() {
+            const val = document.getElementById("searchInput").value.toLowerCase();
+            const found = frasesElements.find(el => el.textContent.toLowerCase().includes(val));
+            if(found) {
+                found.scrollIntoView({block:"center"});
+                found.style.borderBottom = "2px solid red";
+                setTimeout(()=>found.style.borderBottom="", 2000);
+                toggleMenu(); // Fecha menu pra mostrar
+            } else alert("Não encontrado");
         }
     </script>
 </body>
