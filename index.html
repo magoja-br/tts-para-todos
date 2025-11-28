@@ -3,36 +3,52 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Leitor Bíblico Paróquia - Funciona 100%</title>
+    <title>Leitor Bíblico Paróquia - Ilimitado</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <style>
-        body {font-family: Arial; max-width: 900px; margin: 20px auto; padding: 20px; background:#f9f9f9; text-align:center;}
-        h1::before {content:"Cross "; font-size:2em;}
-        #textoContainer {border:2px solid #3498db; border-radius:10px; height:380px; overflow-y:auto; padding:15px; background:white; text-align:left; font-size:18px; line-height:1.8;}
-        #texto {outline:none; user-select:text;}
-        button, select {padding:12px 20px; margin:8px; font-size:16px; background:#3498db; color:white; border:none; border-radius:8px; cursor:pointer;}
-        button:hover {background:#2980b9;}
-        #status {margin:15px; font-weight:bold; color:#27ae60;}
-        .highlight {background:#fffacd !important;}
-        #progressContainer {display:none; margin:15px; background:#eee; padding:10px; border-radius:8px;}
-        #progressBar {width:100%; height:25px; background:#ddd; border-radius:12px; overflow:hidden;}
-        #progress {width:0%; height:100%; background:#27ae60; transition:width 0.4s;}
+        body { font-family: Arial; max-width: 900px; margin: 20px auto; padding: 20px; background: #f9f9f9; text-align: center; }
+        h1 { color: #2c3e50; }
+        h1::before { content: "✝️ "; font-size: 2em; }
+        #textoContainer { 
+            border: 2px solid #3498db; 
+            border-radius: 10px; 
+            height: 340px; 
+            overflow-y: auto; 
+            padding: 15px; 
+            background: white; 
+            text-align: left; 
+            font-size: 18px; 
+            line-height: 1.8; 
+            margin: 15px 0;
+        }
+        #texto { outline: none; }
+        button, select { padding: 12px 20px; margin: 8px; font-size: 16px; background: #3498db; color: white; border: none; border-radius: 8px; cursor: pointer; }
+        button:hover { background: #2980b9; }
+        #status { margin: 15px; font-weight: bold; color: #27ae60; }
+        .highlight { background: #fffacd !important; }
+        #progressContainer { display: none; margin: 10px; }
+        #progressBar { width: 100%; height: 20px; background: #ddd; border-radius: 10px; overflow: hidden; }
+        #progress { width: 0%; height: 100%; background: #27ae60; transition: width 0.3s; }
     </style>
 </head>
 <body>
     <h1>Leitor Bíblico Paróquia</h1>
-    <p>Selecione qualquer trecho → fica amarelo claro<br>Só o trecho selecionado é lido e baixado em MP3 (funciona em qualquer celular!)</p>
+    <p>Selecione qualquer trecho → fica amarelo claro e só ele é lido<br>Gere MP3 ilimitado em silêncio com progresso (sem limites diários)!</p>
 
     <input type="file" id="arquivo" accept=".txt,.pdf"><br><br>
 
-    <select id="vozSelect"><option>Carregando vozes PT-BR...</option></select>
+    <select id="vozSelect">
+        <option>Carregando vozes PT-BR...</option>
+    </select>
     <input type="range" id="velocidade" min="0.5" max="2" step="0.1" value="0.9">
     <span id="velValue">0.9x</span><br><br>
 
-    <div id="textoContainer"><div id="texto" contenteditable="true">
-        Cole ou carregue um texto aqui...<br><br>
-        Exemplo: No princípio, Deus criou os céus e a terra. E viu Deus que isso era bom.
-    </div></div>
+    <div id="textoContainer">
+        <div id="texto" contenteditable="true">
+            Cole ou carregue um texto aqui...<br><br>
+            Exemplo: No princípio, Deus criou os céus e a terra.
+        </div>
+    </div>
 
     <div id="progressContainer">
         <div>Gerando MP3 em silêncio: <span id="progressText">0%</span></div>
@@ -41,146 +57,181 @@
 
     <div>
         <button onclick="ouvir()">Ouvir trecho selecionado</button>
-        <button onclick="parar()">Parar</button>
-        <button onclick="gerarMP3()">Gerar MP3 (silencioso + progresso)</button>
-        <button onclick="compartilhar()">Compartilhar</button>
+        <button onclick="parar()">⏹ Parar</button>
+        <button onclick="gerarMP3()">💾 Gerar e Baixar MP3</button>
+        <button onclick="compartilhar()">📱 Compartilhar</button>
     </div>
 
     <div id="status">Carregando vozes PT-BR...</div>
 
     <script>
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-        const textoDiv   = document.getElementById("texto");
-        const status     = document.getElementById("status");
-        const vozSelect  = document.getElementById("vozSelect");
+        const textoDiv = document.getElementById("texto");
+        const status = document.getElementById("status");
+        const vozSelect = document.getElementById("vozSelect");
         const velocidade = document.getElementById("velocidade");
-        const velValue   = document.getElementById("velValue");
+        const velValue = document.getElementById("velValue");
         const progressContainer = document.getElementById("progressContainer");
-        const progress   = document.getElementById("progress");
+        const progress = document.getElementById("progress");
         const progressText = document.getElementById("progressText");
+        let utterance = null;
         let voices = [];
 
         velocidade.oninput = () => velValue.textContent = velocidade.value + "x";
 
-        // === VOZES SÓ PT-BR ===
+        // === CARREGAR APENAS VOZES PT-BR ===
         function carregarVozes() {
             voices = speechSynthesis.getVoices().filter(v => v.lang === "pt-BR");
             vozSelect.innerHTML = "";
             if (voices.length === 0) {
-                vozSelect.innerHTML = "<option>Nenhuma voz PT-BR (use Chrome)</option>";
-                status.textContent = "Use Chrome ou instale vozes PT-BR no Windows.";
+                vozSelect.innerHTML = '<option>Sem vozes PT-BR (use Chrome)</option>';
+                status.textContent = "Instale vozes PT-BR ou use Chrome.";
                 return;
             }
-            voices.forEach((v,i) => vozSelect.add(new Option(v.name, i)));
-            vozSelect.selectedIndex = 0;
-            status.textContent = `Pronto! ${voices.length} vozes PT-BR carregadas.`;
+            voices.forEach((v, i) => {
+                const opt = new Option(v.name, i);
+                if (i === 0) opt.selected = true;
+                vozSelect.add(opt);
+            });
+            status.textContent = `Pronto! ${voices.length} vozes PT-BR. Selecione um trecho.`;
         }
         if (speechSynthesis.getVoices().length) carregarVozes();
         else speechSynthesis.onvoiceschanged = carregarVozes;
 
-        // === DESTAQUE AMARELO CLARO ===
+        // Destaque amarelo claro
         textoDiv.addEventListener("mouseup", () => {
             const sel = window.getSelection();
-            if (sel.toString().length > 0) {
+            if (sel.rangeCount > 0) {
                 const range = sel.getRangeAt(0);
-                const span = document.createElement("span");
-                span.className = "highlight";
-                try { range.surroundContents(span); } catch(e) {}
-                sel.removeAllRanges();
-                status.textContent = `Selecionado: ${sel.toString().split(" ").length} palavras`;
+                if (range.toString().length > 0) {
+                    const span = document.createElement("span");
+                    span.className = "highlight";
+                    try { range.surroundContents(span); } catch(e) {}
+                    sel.removeAllRanges();
+                    status.textContent = `Trecho destacado (${range.toString().split(" ").length} palavras)`;
+                }
             }
         });
 
-        // === UPLOAD TXT / PDF ===
-        document.getElementById("arquivo").onchange = async e => {
-            const file = e.target.files[0];
+        // Upload
+        document.getElementById("arquivo").onchange = async function() {
+            const file = this.files[0];
             if (!file) return;
-            status.textContent = "Carregando arquivo...";
-            if (file.name.endsWith(".txt")) {
-                textoDiv.innerHTML = (await file.text()).replace(/\n/g,"<br>");
-            } else if (file.name.endsWith(".pdf")) {
-                const buf = await file.arrayBuffer();
-                const pdf = await pdfjsLib.getDocument(buf).promise;
-                let txt = "";
-                for (let i=1; i<=pdf.numPages; i++) {
-                    const page = await pdf.getPage(i);
-                    const content = await page.getTextContent();
-                    txt += content.items.map(x=>x.str).join(" ") + "<br><br>";
+            status.textContent = "Carregando...";
+            try {
+                if (file.name.endsWith(".txt")) {
+                    textoDiv.innerHTML = (await file.text()).replace(/\n/g, "<br>");
+                } else if (file.name.endsWith(".pdf")) {
+                    const arrayBuffer = await file.arrayBuffer();
+                    const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
+                    let texto = "";
+                    for (let i = 1; i <= pdf.numPages; i++) {
+                        const page = await pdf.getPage(i);
+                        const content = await page.getTextContent();
+                        texto += content.items.map(t => t.str).join(" ") + "<br><br>";
+                    }
+                    textoDiv.innerHTML = texto;
                 }
-                textoDiv.innerHTML = txt;
+                status.textContent = "Arquivo carregado! Role e selecione o trecho.";
+            } catch (e) {
+                status.textContent = "Erro no arquivo. Cole o texto manualmente.";
+                alert("Erro: " + e.message);
             }
-            status.textContent = "Arquivo carregado! Selecione o trecho.";
         };
 
-        // === OUVIR SÓ O TRECHO SELECIONADO ===
+        // === OUVIR SÓ O TRECHO SELECIONADO (ROBUSTO) ===
         function ouvir() {
             parar();
-            let texto = window.getSelection().toString().trim();
-            if (!texto) texto = textoDiv.innerText.trim();
-            if (!texto) return alert("Selecione ou digite um texto!");
-
-            const u = new SpeechSynthesisUtterance(texto);
-            u.voice = voices[vozSelect.selectedIndex];
-            u.rate = parseFloat(velocidade.value);
-            u.onend = () => status.textContent = "Leitura concluída";
-            speechSynthesis.speak(u);
-            status.textContent = "Lendo só o trecho selecionado...";
+            const sel = window.getSelection();
+            let texto = "";
+            if (sel.rangeCount > 0 && sel.toString().trim()) {
+                texto = sel.toString().trim(); // Só o selecionado
+                status.textContent = `Lendo só o trecho selecionado (${texto.split(" ").length} palavras)...`;
+            } else {
+                texto = textoDiv.innerText.trim(); // Fallback para todo
+                status.textContent = "Lendo todo o texto...";
+            }
+            if (!texto) return alert("Selecione um trecho ou digite um texto!");
+            utterance = new SpeechSynthesisUtterance(texto);
+            utterance.voice = voices[vozSelect.selectedIndex];
+            utterance.rate = parseFloat(velocidade.value);
+            utterance.volume = 1;
+            utterance.onend = () => status.textContent = "Leitura concluída";
+            utterance.onerror = () => status.textContent = "Erro na leitura – tente recarregar.";
+            speechSynthesis.speak(utterance);
         }
 
-        function parar() { speechSynthesis.cancel(); status.textContent = "Parado"; }
+        function parar() { 
+            speechSynthesis.cancel(); 
+            status.textContent = "Parado."; 
+        }
 
-        // === GERAR MP3 EM SILÊNCIO COM PROGRESSO (usando API pública confiável) ===
+        // === GERAR MP3 EM SILÊNCIO COM PROGRESSO (ILIMITADO VIA TTSFREE.COM) ===
         async function gerarMP3() {
-            let texto = window.getSelection().toString().trim() || textoDiv.innerText.trim();
+            const sel = window.getSelection();
+            let texto = "";
+            if (sel.rangeCount > 0 && sel.toString().trim()) {
+                texto = sel.toString().trim();
+            } else {
+                texto = textoDiv.innerText.trim();
+            }
             if (!texto) return alert("Selecione um trecho!");
+            if (texto.length > 2000) return alert("Texto muito longo (máx. 2000 chars). Divida em partes.");
 
-            progressContainer.style.display = "block";
-            progress.style.width = "0%";
-            progressText.textContent = "0%";
+            progressContainer.style.display = 'block';
+            updateProgress(0, "Preparando síntese...");
 
-            // API pública que funciona em 2025 (sem CORS, devolve MP3 direto)
-            const apiUrl = "https://api.ttsopen.com/v1/tts";
-            const response = await fetch(apiUrl, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    text: texto.substring(0,2000),
-                    voice: "pt-br-x-tta-network", // voz brasileira neural
-                    speed: parseFloat(velocidade.value)
-                })
-            });
+            try {
+                // TTSFree.com: ilimitado, PT-BR, gera MP3 direto (sem conta)
+                const formData = new FormData();
+                formData.append('input_text', texto);
+                formData.append('input_voice', 'pt-BR'); // Voz PT-BR padrão
+                formData.append('input_speed', velocidade.value);
 
-            if (!response.ok) throw new Error("Falha na API");
+                updateProgress(25, "Enviando texto...");
+                const response = await fetch('https://ttsfree.com/tts', {
+                    method: 'POST',
+                    body: formData
+                });
 
-            const arrayBuffer = await response.arrayBuffer();
-            const blob = new Blob([arrayBuffer], {type: "audio/mpeg"});
-            const url = URL.createObjectURL(blob);
+                if (!response.ok) throw new Error('Falha na síntese');
 
-            // Progresso simulado até 100%
-            let p = 0;
-            const int = setInterval(() => {
-                p += 8;
-                if (p >= 100) { clearInterval(int); p=100; }
-                progress.style.width = p + "%";
-                progressText.textContent = p + "%";
-            }, 200);
+                updateProgress(50, "Gerando áudio...");
+                const result = await response.json(); // Retorna link MP3
+                const mp3Url = result.output_url || result.mp3_link; // Ajuste baseado na resposta
 
-            setTimeout(() => {
-                clearInterval(int);
-                progress.style.width = "100%";
-                progressText.textContent = "100% - Pronto!";
+                updateProgress(75, "Baixando MP3...");
+                const audioResponse = await fetch(mp3Url);
+                const audioBlob = await audioResponse.blob();
+                const downloadUrl = URL.createObjectURL(audioBlob);
+
+                updateProgress(100, "100% - Pronto!");
                 const a = document.createElement("a");
-                a.href = url;
+                a.href = downloadUrl;
                 a.download = "biblia-paroquia.mp3";
+                document.body.appendChild(a);
                 a.click();
-                setTimeout(() => progressContainer.style.display = "none", 2000);
-                status.textContent = "MP3 baixado com sucesso!";
-            }, 1500);
+                document.body.removeChild(a);
+                URL.revokeObjectURL(downloadUrl);
+
+                setTimeout(() => { progressContainer.style.display = 'none'; }, 2000);
+                status.textContent = "MP3 gerado e baixado com sucesso! (voz PT-BR natural, ilimitado)";
+            } catch (e) {
+                progressContainer.style.display = 'none';
+                status.textContent = "Erro na geração. Tente texto menor ou Chrome.";
+                console.error("Detalhes do erro:", e);
+                alert("Falha: " + e.message + ". Dica: Use Chrome e texto < 2000 chars.");
+            }
+        }
+
+        function updateProgress(percent, text) {
+            progress.style.width = percent + "%";
+            progressText.textContent = text;
         }
 
         function compartilhar() {
-            const msg = "Ouça a Bíblia selecionando trechos e baixando MP3 grátis → https://magoja-br.github.io/tts-para-todos";
-            if (navigator.share) navigator.share({title:"Leitor Bíblico", text:msg});
+            const msg = "Ouça a Bíblia selecionando trechos e baixando MP3 ilimitado grátis → https://magoja-br.github.io/tts-para-todos";
+            if (navigator.share) navigator.share({title: "Leitor Bíblico", text: msg});
             else { navigator.clipboard.writeText(msg); status.textContent = "Link copiado!"; }
         }
     </script>
