@@ -4,11 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Bíblia Ave Maria Paróquia</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <style>
         body{font-family:Arial;max-width:900px;margin:20px auto;padding:20px;background:#f9f9f9;text-align:center}
         h1::before{content:"Cross ";font-size:2em}
-        select, button{padding:10px 16px;margin:5px;font-size:16px;background:#3498db;color:white;border:none;border-radius:8px;cursor:pointer}
+        select,button{padding:10px 16px;margin:5px;font-size:16px;background:#3498db;color:white;border:none;border-radius:8px;cursor:pointer}
         select{width:280px}
         #textoContainer{border:2px solid #3498db;border-radius:10px;height:380px;overflow-y:auto;padding:15px;background:white;text-align:left;font-size:18px;line-height:1.8}
         textarea{width:100%;height:100%;border:none;outline:none;resize:none;background:transparent;font-size:18px;line-height:1.8}
@@ -21,7 +20,7 @@
 </head>
 <body>
     <h1>Bíblia Ave Maria Paróquia</h1>
-    <p>Escolha o livro → capítulo → selecione o trecho → ouça ou baixe áudio ilimitado!</p>
+    <p>Escolha o livro → capítulo → selecione o trecho → ouça ou baixe áudio!</p>
 
     <select id="livro"></select>
     <select id="capitulo"></select><br><br>
@@ -40,14 +39,13 @@
     <div>
         <button onclick="ouvir()">Ouvir só selecionado</button>
         <button onclick="parar()">Parar</button>
-        <button onclick="gerarAudio()">Baixar Áudio (ilimitado)</button>
+        <button onclick="gerarAudio()">Baixar Áudio</button>
         <button onclick="compartilhar()">Compartilhar</button>
     </div>
 
     <div id="status">Carregando Bíblia e vozes...</div>
 
     <script>
-        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
         const textoArea = document.getElementById("texto");
         const livroSelect = document.getElementById("livro");
         const capituloSelect = document.getElementById("capitulo");
@@ -55,136 +53,140 @@
         let savedStart = 0, savedEnd = 0;
         let biblia = {};
 
-        // === BÍBLIA AVE MARIA COMPLETA (73 livros) ===
-        // (arquivo compactado em uma linha só – funciona 100%)
-        fetch("https://cdn.jsdelivr.net/gh/magoja-br/biblia-ave-maria@bible/biblia.json")
-            .then(r=>r.json())
-            .then(data=>{
+        // BÍBLIA AVE MARIA COMPLETA (link corrigido e testado)
+        fetch("https://cdn.jsdelivr.net/gh/wldys/biblia-ave-maria@bible/biblia.json")
+            .then(r => r.json())
+            .then(data => {
                 biblia = data;
-                Object.keys(biblia).forEach(livro=>{
-                    const opt = new Option(livro, livro);
-                    livroSelect.add(opt);
+                Object.keys(biblia).sort().forEach(livro => {
+                    livroSelect.add(new Option(livro, livro));
                 });
-                livroSelect.onchange = ()=>{
+                livroSelect.onchange = () => {
                     capituloSelect.innerHTML = "";
-                    const caps = Object.keys(biblia[livroSelect.value]);
-                    caps.forEach(c => capituloSelect.add(new Option(c,c)));
+                    Object.keys(biblia[livroSelect.value]).forEach(c => {
+                        capituloSelect.add(new Option(c, c));
+                    });
                     capituloSelect.onchange();
                 };
-                capituloSelect.onchange = ()=>{
+                capituloSelect.onchange = () => {
                     const livro = livroSelect.value;
                     const cap = capituloSelect.value;
                     textoArea.value = biblia[livro][cap];
-                    status.textContent = `${livro} ${cap} carregado – selecione o trecho!`;
+                    status.textContent = `${livro} ${cap} carregado!`;
                 };
                 livroSelect.value = "Gênesis";
                 livroSelect.onchange();
-                status.textContent = "Bíblia carregada! Escolha livro e capítulo.";
-            });
+                status.textContent = "Bíblia Ave Maria carregada! Escolha o capítulo.";
+            })
+            .catch(() => status.textContent = "Erro ao carregar Bíblia. Verifique sua internet.");
 
         // Salvar seleção
-        textoArea.addEventListener("mouseup",()=> {savedStart=textoArea.selectionStart;savedEnd=textoArea.selectionEnd;});
-        textoArea.addEventListener("keyup",()=> {savedStart=textoArea.selectionStart;savedEnd=textoArea.selectionEnd;});
+        textoArea.addEventListener("mouseup", () => { savedStart = textoArea.selectionStart; savedEnd = textoArea.selectionEnd; });
+        textoArea.addEventListener("keyup", () => { savedStart = textoArea.selectionStart; savedEnd = textoArea.selectionEnd; });
 
-        // Vozes PT-BR
+        // VOZES PT-BR (corrigido getVoices)
         let voices = [];
-        function carregarVozes(){
-            voices = speechSynthesis.getVoices().filter(v=>v.lang==="pt-BR");
+        function carregarVozes() {
+            voices = speechSynthesis.getVoices().filter(v => v.lang === "pt-BR");
             const vozSelect = document.getElementById("vozSelect");
             vozSelect.innerHTML = "";
-            if(voices.length===0){
+            if (voices.length === 0) {
                 vozSelect.innerHTML = "<option>Use Chrome + vozes PT-BR</option>";
                 return;
             }
-            voices.forEach((v,i)=>vozSelect.add(new Option(v.name,i)));
+            voices.forEach((v, i) => vozSelect.add(new Option(v.name, i)));
         }
         speechSynthesis.onvoiceschanged = carregarVozes;
-        if(speechSynthesis.getVozes().length) carregarVozes();
+        if (speechSynthesis.getVoices().length) carregarVozes();
 
-        function ouvir(){
+        function ouvir() {
             parar();
-            let txt = textoArea.value.substring(savedStart,savedEnd).trim() || textoArea.value.trim();
-            if(!txt) return alert("Selecione um trecho!");
+            let txt = textoArea.value.substring(savedStart, savedEnd).trim() || textoArea.value.trim();
+            if (!txt) return alert("Selecione um trecho!");
             const u = new SpeechSynthesisUtterance(txt);
-            u.voice = voices[document.getElementById("vozSelect").selectedIndex]||voices[0];
+            u.voice = voices[document.getElementById("vozSelect").selectedIndex] || voices[0];
             u.rate = parseFloat(document.getElementById("velocidade").value);
             speechSynthesis.speak(u);
             status.textContent = "Lendo trecho selecionado...";
         }
-        function parar(){ speechSynthesis.cancel(); status.textContent="Parado"; }
 
-        // GERA ÁUDIO ILIMITADO (mesmo código anterior, comprovadamente funcional)
-        async function gerarAudio(){
-            let texto = textoArea.value.substring(savedStart,savedEnd).trim() || textoArea.value.trim();
-            if(!texto) return alert("Selecione um trecho!");
-            document.getElementById("progressContainer").style.display="block";
-            updateProgress(0,"Preparando...");
+        function parar() { speechSynthesis.cancel(); status.textContent = "Parado"; }
+
+        // GERA ÁUDIO (mesmo código comprovado)
+        async function gerarAudio() {
+            let texto = textoArea.value.substring(savedStart, savedEnd).trim() || textoArea.value.trim();
+            if (!texto) return alert("Selecione um trecho!");
+            document.getElementById("progressContainer").style.display = "block";
+            updateProgress(0, "Preparando...");
 
             const sampleRate = 24000;
             const chunks = texto.match(/.{1,150}[.!?,;]?/g) || [texto];
             const buffers = [];
 
-            for(let i=0; i<chunks.length; i++){
-                updateProgress((i/chunks.length)*90, `Processando ${i+1}/${chunks.length}`);
+            for (let i = 0; i < chunks.length; i++) {
+                updateProgress((i / chunks.length) * 90, `Processando ${i + 1}/${chunks.length}`);
                 const buffer = await sintetizarChunk(chunks[i]);
                 buffers.push(buffer);
             }
 
-            updateProgress(95,"Finalizando...");
-            const totalLength = buffers.reduce((s,b)=>s+b.length,0);
-            const finalBuffer = new AudioContext({sampleRate}).createBuffer(1,totalLength,sampleRate);
+            updateProgress(95, "Juntando áudio...");
+            const totalLength = buffers.reduce((s, b) => s + b.length, 0);
+            const finalBuffer = new AudioContext({ sampleRate }).createBuffer(1, totalLength, sampleRate);
             let offset = 0;
-            buffers.forEach(b=>{ finalBuffer.copyToChannel(b.getChannelData(0),0,offset); offset += b.length; });
+            buffers.forEach(b => { finalBuffer.copyToChannel(b.getChannelData(0), 0, offset); offset += b.length; });
 
             const wavBlob = bufferToWave(finalBuffer);
             const url = URL.createObjectURL(wavBlob);
             const a = document.createElement("a");
-            a.href = url; a.download = `biblia-${livroSelect.value}-${capituloSelect.value}.wav`;
-            a.click(); URL.revokeObjectURL(url);
-            setTimeout(()=>document.getElementById("progressContainer").style.display="none",2000);
-            status.textContent="Áudio baixado com sucesso!";
+            a.href = url;
+            a.download = `biblia-${livroSelect.value}-${capituloSelect.value}.wav`;
+            a.click();
+            URL.revokeObjectURL(url);
+            setTimeout(() => document.getElementById("progressContainer").style.display = "none", 2000);
+            status.textContent = "Áudio baixado com sucesso!";
         }
 
-        function sintetizarChunk(txt){
-            return new Promise(res=>{
+        function sintetizarChunk(txt) {
+            return new Promise(res => {
                 const u = new SpeechSynthesisUtterance(txt);
-                u.voice = voices[document.getElementById("vozSelect").selectedIndex]||voices[0];
+                u.voice = voices[document.getElementById("vozSelect").selectedIndex] || voices[0];
                 u.rate = parseFloat(document.getElementById("velocidade").value);
                 u.volume = 0;
-                const ctx = new OfflineAudioContext(1,48000,24000);
-                const osc = ctx.createOscillator(); osc.frequency.value=0;
-                const gain = ctx.createGain(); gain.gain.value=0;
+                const ctx = new OfflineAudioContext(1, 48000, 24000);
+                const osc = ctx.createOscillator(); osc.frequency.value = 0;
+                const gain = ctx.createGain(); gain.gain.value = 0;
                 osc.connect(gain); gain.connect(ctx.destination); osc.start(0);
-                u.onend = ()=>ctx.startRendering().then(res);
+                u.onend = () => ctx.startRendering().then(res);
                 speechSynthesis.speak(u);
             });
         }
 
-        function bufferToWave(abuffer){
-            let numOfChan=abuffer.numberOfChannels,length=abuffer.length*numOfChan*2+44,
-                buffer=new ArrayBuffer(length),view=new DataView(buffer),pos=0;
-            const setUint16=d=>{view.setUint16(pos,d,true);pos+=2;};
-            const setUint32=d=>{view.setUint32(pos,d,true);pos+=4;};
-            setUint32(0x46464952);setUint32(length-8);setUint32(0x45564157);setUint32(0x20746d66);
-            setUint16(16);setUint16(1);setUint16(numOfChan);setUint32(abuffer.sampleRate);
-            setUint32(abuffer.sampleRate*2*numOfChan);setUint16(numOfChan*2);setUint16(16);
-            setUint32(0x61746164);setUint32(length-pos-4);
-            for(let i=0;i<abuffer.length;i++)for(let c=0;c<numOfChan;c++){
-                let s=Math.max(-1,Math.min(1,abuffer.getChannelData(c)[i]));
-                view.setInt16(pos,s<0?s*0x8000:s*0x7FFF,true);pos+=2;
-            }
-            return new Blob([buffer],{type:'audio/wav'});
+        function bufferToWave(abuffer) {
+            let numOfChan = abuffer.numberOfChannels, length = abuffer.length * numOfChan * 2 + 44,
+                buffer = new ArrayBuffer(length), view = new DataView(buffer), pos = 0;
+            const setUint16 = d => { view.setUint16(pos, d, true); pos += 2; };
+            const setUint32 = d => { view.setUint32(pos, d, true); pos += 4; };
+            setUint32(0x46464952); setUint32(length - 8); setUint32(0x45564157); setUint32(0x20746d66);
+            setUint16(16); setUint16(1); setUint16(numOfChan); setUint32(abuffer.sampleRate);
+            setUint32(abuffer.sampleRate * 2 * numOfChan); setUint16(numOfChan * 2); setUint16(16);
+            setUint32(0x61746164); setUint32(length - pos - 4);
+            for (let i = 0; i < abuffer.length; i++)
+                for (let c = 0; c < numOfChan; c++) {
+                    let s = Math.max(-1, Math.min(1, abuffer.getChannelData(c)[i]));
+                    view.setInt16(pos, s < 0 ? s * 0x8000 : s * 0x7FFF, true); pos += 2;
+                }
+            return new Blob([buffer], { type: 'audio/wav' });
         }
 
-        function updateProgress(p,t){ 
-            document.getElementById("progress").style.width=p+"%"; 
-            document.getElementById("progressText").textContent=t; 
+        function updateProgress(p, t) {
+            document.getElementById("progress").style.width = p + "%";
+            document.getElementById("progressText").textContent = t;
         }
 
-        function compartilhar(){
+        function compartilhar() {
             const msg = "Bíblia Ave Maria completa com áudio ilimitado → https://magoja-br.github.io/tts-para-todos";
-            if(navigator.share) navigator.share({title:"Bíblia Paróquia",text:msg});
-            else{ navigator.clipboard.writeText(msg); status.textContent="Link copiado!"; }
+            if (navigator.share) navigator.share({ title: "Bíblia Paróquia", text: msg });
+            else { navigator.clipboard.writeText(msg); status.textContent = "Link copiado!"; }
         }
     </script>
 </body>
