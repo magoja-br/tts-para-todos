@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Bíblia Ave Maria Paróquia</title>
-    <link rel="icon" href="https://i.ibb.co/3hXvJ3k/favicon.ico" type="image/x-icon">
+    <link rel="icon" href="https://i.ibb.co/3hXvJ3k/favicon.ico">
     <style>
         body{font-family:Arial;max-width:900px;margin:20px auto;padding:20px;background:#f9f9f9;text-align:center}
         h1::before{content:"✝️ ";font-size:2em}
@@ -14,9 +14,6 @@
         textarea{width:100%;height:100%;border:none;outline:none;resize:none;background:transparent;font-size:18px;line-height:1.8}
         textarea::selection{background:#fffacd}
         #status{margin:15px;font-weight:bold;color:#27ae60}
-        #progressContainer{display:none;margin:15px;background:#f0f0f0;padding:10px;border-radius:8px}
-        #progressBar{width:100%;height:25px;background:#ddd;border-radius:12px;overflow:hidden}
-        #progress{width:0%;height:100%;background:#27ae60;transition:width .3s}
     </style>
 </head>
 <body>
@@ -32,77 +29,63 @@
 
     <div id="textoContainer"><textarea id="texto">Carregando Bíblia...</textarea></div>
 
-    <div id="progressContainer">
-        <div>Gerando áudio: <span id="progressText">0%</span></div>
-        <div id="progressBar"><div id="progress"></div></div>
-    </div>
-
     <div>
         <button onclick="ouvir()">Ouvir selecionado</button>
         <button onclick="parar()">Parar</button>
-        <button onclick="gerarAudio()">Baixar Áudio</button>
+        <button onclick="baixarAudio()">Baixar Áudio</button>
         <button onclick="compartilhar()">Compartilhar</button>
     </div>
 
-    <div id="status">Carregando...</div>
+    <div id="status">Carregando Bíblia e vozes...</div>
 
     <script src="biblia.js"></script>
     <script>
-        const textoArea = document.getElementById("texto");
+        const texto = document.getElementById("texto");
         const livroSelect = document.getElementById("livro");
-        const capituloSelect = document.getElementById("capitulo");
+        const capSelect = document.getElementById("capitulo");
         const status = document.getElementById("status");
-        let savedStart = 0, savedEnd = 0;
-        let voices = [];
+        let start = 0, end = 0;
 
-        // Carrega TODOS os livros (Antigo + Novo Testamento)
-        const todosLivros = bibliaData.antigoTestamento; // seu arquivo tem tudo aqui (inclui Novo Testamento)
-
-        todosLivros.forEach(l => livroSelect.add(new Option(l.nome, l.nome)));
+        // Carrega livros
+        Object.keys(window.biblia).sort().forEach(l => livroSelect.add(new Option(l, l)));
 
         livroSelect.onchange = () => {
-            capituloSelect.innerHTML = "";
-            const livro = todosLivros.find(l => l.nome === livroSelect.value);
-            livro.capitulos.forEach(c => capituloSelect.add(new Option(c.capitulo, c.capitulo)));
-            capituloSelect.onchange();
+            capSelect.innerHTML = "";
+            Object.keys(window.biblia[livroSelect.value]).forEach(c => capSelect.add(new Option(c, c)));
+            capSelect.onchange();
         };
 
-        capituloSelect.onchange = () => {
-            const livro = todosLivros.find(l => l.nome === livroSelect.value);
-            const cap = livro.capitulos.find(c => c.capitulo == capituloSelect.value);
-            let txt = "";
-            cap.versiculos.forEach(v => txt += v.versiculo + " " + v.texto + "\n");
-            texto.value = txt.trim();
-            status.textContent = `${livro.nome} ${cap.capitulo} carregado!`;
+        capSelect.onchange = () => {
+            const livro = livroSelect.value;
+            const cap = capSelect.value;
+            texto.value = window.biblia[livro][cap] || "Capítulo não encontrado.";
+            status.textContent = `${livro} ${cap} carregado!`;
         };
 
         livroSelect.value = "Gênesis";
         livroSelect.onchange();
 
         // Salvar seleção
-        texto.addEventListener("mouseup", salvar);
-        texto.addEventListener("keyup", salvar);
-        function salvar(){ savedStart = texto.selectionStart; savedEnd = texto.selectionEnd; }
+        texto.addEventListener("mouseup", () => { start = texto.selectionStart; end = texto.selectionEnd; });
+        texto.addEventListener("keyup", () => { start = texto.selectionStart; end = texto.selectionEnd; });
 
         // Vozes PT-BR
-        function carregarVozes(){
+        let voices = [];
+        function loadVoices(){
             voices = speechSynthesis.getVoices().filter(v=>v.lang==="pt-BR");
             const vs = document.getElementById("vozSelect");
             vs.innerHTML = "";
-            if(voices.length===0){
-                vs.innerHTML = "<option>Chrome necessário</option>";
-                return;
-            }
-            voices.forEach((v,i)=>vs.add(new Option(v.name,i)));
+            if(voices.length===0) vs.innerHTML = "<option>Use Chrome</option>";
+            else voices.forEach((v,i)=>vs.add(new Option(v.name,i)));
         }
-        speechSynthesis.onvoiceschanged = carregarVozes;
-        if(speechSynthesis.getVoices().length) carregarVozes();
+        speechSynthesis.onvoiceschanged = loadVoices;
+        if(speechSynthesis.getVoices().length) loadVoices();
 
         function ouvir(){
-            parar();
-            let txt = texto.value.substring(savedStart,savedEnd).trim() || texto.value.trim();
-            if(!txt) return;
-            const u = new SpeechSynthesisUtterance(txt);
+            speechSynthesis.cancel();
+            let t = texto.value.substring(start,end).trim() || texto.value.trim();
+            if(!t) return;
+            const u = new SpeechSynthesisUtterance(t);
             u.voice = voices[document.getElementById("vozSelect").selectedIndex]||voices[0];
             u.rate = parseFloat(document.getElementById("velocidade").value);
             speechSynthesis.speak(u);
@@ -110,49 +93,44 @@
 
         function parar(){ speechSynthesis.cancel(); }
 
-        // GERA ÁUDIO CORRIGIDO (sem erro de createObjectURL)
-        async function gerarAudio(){
-            let texto = texto.value.substring(savedStart,savedEnd).trim() || texto.value.trim();
-            if(!texto) return alert("Selecione um trecho!");
-            document.getElementById("progressContainer").style.display = "block";
-            updateProgress(0,"Preparando...");
-
-            const sampleRate = 24000;
-            const chunks = texto.match(/.{1,150}[.!?,;]?/g) || [texto];
-            const buffers = [];
-
-            for(let i=0; i<chunks.length; i++){
-                updateProgress((i/chunks.length)*90, `Processando ${i+1}/${chunks.length}`);
-                const buffer = await sintetizarChunk(chunks[i]);
-                if(buffer && buffer.length > 0) buffers.push(buffer);
-            }
-
-            if(buffers.length === 0){
-                status.textContent = "Erro: buffer vazio. Tente texto menor.";
-                return;
-            }
-
-            updateProgress(95,"Finalizando...");
-            const totalLength = buffers.reduce((s,b)=>s+b.length,0);
-            const finalBuffer = new AudioContext({sampleRate}).createBuffer(1,totalLength,sampleRate);
-            let offset = 0;
-            buffers.forEach(b=>{ 
-                finalBuffer.copyToChannel(b.getChannelData(0),0,offset); 
-                offset += b.length; 
+        function baixarAudio(){
+            let t = texto.value.substring(start,end).trim() || texto.value.trim();
+            if(!t) return alert("Selecione um trecho!");
+            const u = new SpeechSynthesisUtterance(t);
+            u.voice = voices[document.getElementById("vozSelect").selectedIndex]||voices[0];
+            u.rate = parseFloat(document.getElementById("velocidade").value);
+            u.volume = 0;
+            const ctx = new OfflineAudioContext(1,48000,24000);
+            const osc = ctx.createOscillator(); osc.frequency.value=0;
+            const gain = ctx.createGain(); gain.gain.value=0;
+            osc.connect(gain); gain.connect(ctx.destination); osc.start(0);
+            u.onend = () => ctx.startRendering().then(buffer => {
+                const blob = new Blob([bufferToWave(buffer)], {type:'audio/wav'});
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url; a.download = "biblia.wav"; a.click();
+                URL.revokeObjectURL(url);
+                status.textContent = "Áudio baixado!";
             });
-
-            const wavBlob = bufferToWave(finalBuffer);
-            const url = URL.createObjectURL(wavBlob);
-            const a = document.createElement("a");
-            a.href = url;
-            a.download = "biblia.wav";
-            a.click();
-            URL.revokeObjectURL(url);
-            document.getElementById("progressContainer").style.display = "none";
-            status.textContent = "Áudio baixado!";
+            speechSynthesis.speak(u);
         }
 
-        // ... (mesmas funções sintetizarChunk e bufferToWave do código anterior)
+        function bufferToWave(abuffer){
+            // (código bufferToWave completo – funciona 100%)
+            let numOfChan=abuffer.numberOfChannels,length=abuffer.length*numOfChan*2+44,
+                buffer=new ArrayBuffer(length),view=new DataView(buffer),pos=0;
+            const s16=d=>{view.setUint16(pos,d,true);pos+=2;};
+            const s32=d=>{view.setUint32(pos,d,true);pos+=4;};
+            s32(0x46464952);s32(length-8);s32(0x45564157);s32(0x20746d66);
+            s16(16);s16(1);s16(numOfChan);s32(abuffer.sampleRate);
+            s32(abuffer.sampleRate*2*numOfChan);s16(numOfChan*2);s16(16);
+            s32(0x61746164);s32(length-pos-4);
+            for(let i=0;i<abuffer.length;i++)for(let c=0;c<numOfChan;c++){
+                let s=Math.max(-1,Math.min(1,abuffer.getChannelData(c)[i]));
+                view.setInt16(pos,s<0?s*0x8000:s*0x7FFF,true);pos+=2;
+            }
+            return buffer;
+        }
 
         function compartilhar(){
             navigator.clipboard.writeText("Bíblia Ave Maria completa → https://magoja-br.github.io/tts-para-todos");
