@@ -38,8 +38,8 @@
 
     <div id="status">Carregando Bíblia...</div>
 
-    <!-- Carrega seu biblia.json exatamente como você enviou -->
-    <script src="biblia.json"></script>
+    <!-- Agora carrega como JavaScript -->
+    <script src="biblia.js"></script>
     <script>
         const texto = document.getElementById("texto");
         const livroSelect = document.getElementById("livro");
@@ -52,8 +52,8 @@
         texto.addEventListener("mouseup", () => { savedStart = texto.selectionStart; savedEnd = texto.selectionEnd; });
         texto.addEventListener("keyup", () => { savedStart = texto.selectionStart; savedEnd = texto.selectionEnd; });
 
-        // Carrega a Bíblia do seu arquivo biblia.json (exatamente o formato que você enviou)
-        const livros = bibliaData.antigoTestamento; // seu arquivo tem isso
+        // Carrega a Bíblia do seu biblia.js (formato que você enviou)
+        const livros = bibliaData.antigoTestamento;
 
         livros.forEach(livro => {
             livroSelect.add(new Option(livro.nome, livro.nome));
@@ -79,7 +79,7 @@
             status.textContent = `${livroAtual.nome} ${capituloAtual.capitulo} carregado!`;
         };
 
-        // Carrega Gênesis 1 ao iniciar
+        // Inicia com Gênesis 1
         livroSelect.value = "Gênesis";
         livroSelect.onchange();
 
